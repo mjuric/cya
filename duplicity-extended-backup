@@ -10,47 +10,38 @@
 
 set -e
 
-RESTORE_SCRIPT=$(dirname $(readlink -f $0))/restore-all-links-and-metadata
-
 cd "$1"
 shift
 
-DUPEXT_TMP=$(mktemp -d --tmpdir XXXXXXXX.dupext)
-
-# Delete the temporary directory on exit
-trap "rm -rf '$DUPEXT_TMP'" EXIT
+# Delete the .dupext directory on exit
+trap "rm -rf .dupext" EXIT
+mkdir -p .dupext
 
 # copy the restore script
-cp "$RESTORE_SCRIPT" "$DUPEXT_TMP"
-
+RESTORE_SCRIPT=$(dirname $(readlink -f $0))/restore-all-links-and-metadata
+cp "$RESTORE_SCRIPT" .dupext
 
 #
 # handle hard links
 #
 
 # Get a list of all non-directories with more than one hard link, and sort it by inode
-find ! -type d -links +1 -printf '%i %n %P\0' | sort -n -z > "$DUPEXT_TMP"/hardlinks.txtz
+find ! -type d -links +1 -printf '%i %n %P\0' | sort -n -z > .dupext/hardlinks.txtz
 
 # Create an exclusion file for duplicity, for multiply hardlinked files
-cat "$DUPEXT_TMP"/hardlinks.txtz \
+cat .dupext/hardlinks.txtz \
 	| perl -e '$/="\0"; while(<>) { chomp; ($i, $l, $_) = /^(\d+) (\d+) (.*)/s; if($i==$i0) { print "./$_\0"; } $i0 = $i; }' \
-	> "$DUPEXT_TMP"/exclude.txtz
+	> .dupext/exclude.txtz
 
 #
 # store ACLs
 #
-getfacl -R . | awk 'BEGIN { RS=""; FS="\n"; } ! /^# file: .dupext.*/ { print $0"\n" }' >  "$DUPEXT_TMP"/acl.txt
+getfacl -R . | awk 'BEGIN { RS=""; FS="\n"; } ! /^# file: .dupext.*/ { print $0"\n" }' >  .dupext/acl.txt
 
 #
 # store xattrs
 #
-getfattr -m . -d -R . | awk 'BEGIN { RS=""; FS="\n"; } ! /^# file: .dupext.*/ { print $0"\n" }' > "$DUPEXT_TMP"/xattr.txt
-
-# copy to .dupext directory only if the files have changed, to avoid altering their timestamps
-for pth in "$DUPEXT_TMP/"*; do
-	fn=$(basename $pth)
-	test -f ".dupext/$fn" && cmp "$pth" ".dupext/$fn" || { cp -a "$pth" ".dupext/$fn" && echo "$pth -> .dupext/$fn"; }
-done
+getfattr -m . -d -R . | awk 'BEGIN { RS=""; FS="\n"; } ! /^# file: .dupext.*/ { print $0"\n" }' > .dupext/xattr.txt
 
 # run duplicity, excluding the hardlinks
-duplicity --null-separator --exclude-filelist "$DUPEXT_TMP"/exclude.txtz . "$@"
+duplicity --null-separator --exclude-filelist .dupext/exclude.txtz . "$@"
