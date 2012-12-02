@@ -5,25 +5,25 @@
 #	Example: mbackup.py root@moya.dev.lsstcorp.org:/etc mjuric@archive.lsstcorp.org:/data/backups/moya
 #
 
-import time, os, os.path, glob, datetime, subprocess, itertools, argparse, socket, getpass
+import time, os, os.path, glob, datetime, subprocess, itertools, argparse, socket, getpass, pipes
 
 class Backup(object):
-	dest_base = None	# Backup directory tree base (path)
-	dest_host = None	# Host name for Duplicity the destination machine to use
-				# to connect from the destination machine (may include the username)
-				# Will be passed to duplicity using scp:// protocol.
-	src_url = None		# URL to the machine to be backed up
-	src_host = None		# Host part of src_url (may include the username). Will be passed to ssh.
-	src_dir = None		# Directory part of src_dest.
+	dest_base = None		# Backup directory tree base (path)
+	dest_host = None		# Host name for Duplicity the destination machine to use
+					# to connect from the destination machine (may include the username)
+					# Will be passed to duplicity using scp:// protocol.
+	src_url = None			# URL to the machine to be backed up
+	src_host = None			# Host part of src_url (may include the username). Will be passed to ssh.
+	src_dir = None			# Directory part of src_dest.
 
-	backup_cmd = 'duplicity'# Backup command to use on the remote end
-	backup_cmd_opts = None	# Duplicity options
+	backup_cmd = 'duplicity'	# Backup command to use on the remote end
+	backup_cmd_opts = None		# Duplicity options
 
 	def hardlink(self, files, dest_dir):
 		new_files = [ os.path.join(dest_dir, os.path.basename(fn)) for fn in files ]
-		print '===', dest_dir
+		#print '===', dest_dir
 		for src, new in itertools.izip(files, new_files):
-			print 'hardlink: ', new, '->', src
+			#print 'hardlink: ', new, '->', src
 			os.link(src, new)
 		return new_files
 
@@ -31,19 +31,16 @@ class Backup(object):
 		return self.incremental_backup(dest_dir)
 
 	def incremental_backup(self, dest_dir):
-		# run the backup
-
-		# Run backup
-		## duplicity /usr/local file://$(pwd)/backups --volsize 25 --no-encryption --log-file log.log
-		## sudo -E duplicity '/etc' 'scp://mjuric@moya.dev.lsstcorp.org//data/backups/moya/2000' --volsize 100 --no-encryption
-		##cmd = "ssh -CA %(host)s duplicity '%(from)s' 'scp://%(backup)s/%(dest_dir)s' --volsize 100 --no-encryption" % \
-		##	{'host': host, 'from': dir, 'backup': dest_host, 'dest_dir': dest_dir}
-		cmd = "ssh -CA %(host)s '%(backup_cmd)s' '%(from)s' '%(dest_host)s/%(dest_dir)s' %(backup_cmd_opts)s" % \
-			{'backup_cmd' : self.backup_cmd,
-			 'host': self.src_host, 'from': self.src_dir, 'dest_host': self.dest_host, 'dest_dir': dest_dir,
-			 'backup_cmd_opts': self.backup_cmd_opts}
-		print cmd
-		subprocess.check_call(cmd, shell=True)
+		print "Backing up to %s" % (dest_dir)
+		cmd = ["ssh", "-CA", self.src_host, self.backup_cmd, self.src_dir, '%s/%s' % (self.dest_host, self.dest_dir), self.backup_cmd_opts]
+		print "Executing: %s" % (" ".join((pipes.quote(s) for s in cmd)))
+#		subprocess.check_call(cmd)
+		p = subprocess.Popen(cmd, stdout=subprocess.PIPE)
+		for line in p.stdout:
+			print "--- %s" % (line),
+		p.communicate()
+		if p.returncode:
+			raise subprocess.CalledProcessError(p.returncode, " ".join((pipes.quote(s) for s in cmd)))
 
 		# return the full path to all files existing in the backup set directory
 		files = [ fn for fn in (os.path.join(dest_dir, f) for f in os.listdir(dest_dir)) if os.path.isfile(fn) ]
@@ -55,8 +52,8 @@ class Backup(object):
 			return False
 		return True
 
-	def mkbackup(self, dest_dir):
-		print 'mkbackup:', self.src_url, dest_dir
+	def do_backup(self, dest_dir):
+		#print 'do_backup:', self.src_url, dest_dir
 
 		if not os.path.exists(dest_dir):
 			os.makedirs(dest_dir)
@@ -64,12 +61,12 @@ class Backup(object):
 
 		if self.no_backups_exist(dest_dir):
 			up_dir = os.path.dirname(dest_dir)
-			print up_dir
 			if up_dir == self.dest_base:
 				return self.full_backup(dest_dir)
 
-			files = self.mkbackup(up_dir)
+			files = self.do_backup(up_dir)
 			files = self.hardlink(files, dest_dir)
+			print "Hardlinked from %s" % (dest_dir)
 		else:
 			files = self.incremental_backup(dest_dir)
 
@@ -96,17 +93,18 @@ class Backup(object):
 		self.src_url = kwargs['src_url']
 		self.src_host, self.src_dir = self.src_url.split(":")
 
-		now = datetime.datetime.strptime(kwargs["now"], '%Y-%m-%d %H:%M:%S.%f')
-		self.dest_dir = os.path.join(self.dest_base, self.date2dir(now))
+		self.dest_dir = os.path.join(self.dest_base, self.date2dir(kwargs['now']))
 
 		self.dest_host = kwargs['dest_host']
 		self.backup_cmd = kwargs['backup_cmd']
 		self.backup_cmd_opts = kwargs['backup_cmd_opts']
+		
+		self._now = kwargs['now']
 
-		print "Creating backup for: %s [%s]" % (now, self.dest_dir)
-		#print vars(self)
-
-		self.mkbackup(self.dest_dir)
+	def run(self):
+		print "Adding backup to %s (for time=%s)" % (self.dest_dir, self._now)
+		self.do_backup(self.dest_dir)
+		print "Finished backup to %s" % (self.dest_dir)
 
 #./mbackup.py mjuric@moya.dev.lsstcorp.org:/data/backups/moya_test /data/backups/moya \
 #             --backup-cmd-opts="--volsize 100 --no-encryption" --backup-cmd=duplicity-extended-backup
@@ -127,9 +125,17 @@ if __name__ == "__main__":
 	parser.add_argument('--backup-cmd', dest='backup_cmd', default='duplicity', help='The command to run on the backup target to have it backed up.')
 	parser.add_argument('--backup-cmd-opts', dest='backup_cmd_opts', default='', help='Options to pass to the backup command.')
 
-	parser.add_argument('--force-date', dest='now', default=str(datetime.datetime.today()), metavar='T', help='Force the current time to be T.')
+	parser.add_argument('--force-time', dest='now', default=str(datetime.datetime.today()), metavar='T', help='Force the current time to be T. Must be formatted as "YYYY-MM-DD [HH-MM-SS[.SS]]"')
 
 	args = parser.parse_args()
 
-	bkp = Backup(**vars(args))
+	try:
+		args.now = datetime.datetime.strptime(args.now, '%Y-%m-%d %H:%M:%S.%f')
+	except ValueError:
+		try:
+			args.now = datetime.datetime.strptime(args.now, '%Y-%m-%d %H:%M:%S')
+		except ValueError:
+			args.now = datetime.datetime.strptime(args.now, '%Y-%m-%d')
 
+	bkp = Backup(**vars(args))
+	bkp.run()
