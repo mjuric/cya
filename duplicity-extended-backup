@@ -36,7 +36,7 @@ cat .dupext/hardlinks.txtz \
 #
 # store ACLs
 #
-getfacl -R . | awk 'BEGIN { RS=""; FS="\n"; } ! /^# file: .dupext.*/ { print $0"\n" }' >  .dupext/acl.txt
+getfacl -n -R . | awk 'BEGIN { RS=""; FS="\n"; } ! /^# file: .dupext.*/ { print $0"\n" }' >  .dupext/acl.txt
 
 #
 # store xattrs
