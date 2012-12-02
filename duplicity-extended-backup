@@ -41,7 +41,7 @@ getfacl -R . | awk 'BEGIN { RS=""; FS="\n"; } ! /^# file: .dupext.*/ { print $0"
 #
 # store xattrs
 #
-getfattr -m . -d -R . | awk 'BEGIN { RS=""; FS="\n"; } ! /^# file: .dupext.*/ { print $0"\n" }' > .dupext/xattr.txt
+getfattr -h -m . -d -R . | awk 'BEGIN { RS=""; FS="\n"; } ! /^# file: .dupext.*/ { print $0"\n" }' > .dupext/xattr.txt
 
 # run duplicity, excluding the hardlinks
 duplicity --null-separator --exclude-filelist .dupext/exclude.txtz . "$@"
