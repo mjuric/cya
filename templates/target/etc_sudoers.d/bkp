@@ -1,0 +1,6 @@
+#
+# cya backup user settings (user 'bkp')
+#
+Defaults:bkp	!requiretty
+Defaults:bkp	env_keep += "SSH_AUTH_SOCK"
+bkp     ALL= NOPASSWD: /etc/cya/backup

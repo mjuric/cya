@@ -1,0 +1,79 @@
+Unattended automated backup
+===========================
+
+cya is designed to make backing up multiple hosts to a single archive server
+secure and (relatively) easy.  It needs one account on the archive server
+(named 'archive') and one on the server being backed up (named 'bkp').
+
+A cya-driven unattended backup runs as follows:
+
+	1) cya is activated daily by cron on the archive server
+
+	2) it computes the subdirectory of the backup set based on time of
+	   backup (e.g., 2000/2010/2012/2012-12/2012-12-02 for a backup
+	   taken on 2012-12-04),
+
+	3) it invokes duplicity on the target host (the host to be backed
+	   up) giving it the backup set directory computed in #2. duplicity
+	   builds an incremental backup, and uploads the increments to 
+	   that directory (using scp://).
+
+	4) once a backup is done, cya chmods it to root.root to ensure it
+	   can't be deleted or changed any more.
+
+
+Cookbook: Setting up cya on 'archive' and 'target' hosts
+========================================================
+
+- on the archive host:
+	* install cya in /opt/cya
+	* create /etc/cya based on archive/etc_cya
+	* create ssh key for access to target hosts (and back) in /etc/cya/keys
+
+	* create user named 'archive'
+	* add the public key from /etc/cya/keys to archive's authorized_keys
+
+	* edit /etc/cya/run backup driver script to point it to right target hosts
+	* add to /etc/cya/run to crontab, to be run daily
+
+- on each target host
+	* install cya to /opt/cya
+
+	* create user bkp
+	* add archive host's key to bkp's authorized_keys
+	* add sudoers entry to /etc/sudoers.d/bkp from target/etc_sudoers.d
+
+	* create /etc/cya based on target/etc_cya
+	* edit /etc/cya/backup script to specify how and what to back up
+
+Security notes:
+===============
+
+cya invokes duplicity on the target by logging in invocation script verifies
+that the archive server to which duplicity is being asked to upload the
+increments is the correct one, and refuses to backup if it isn't.  This way,
+if the key to bkp@target is ever compromised, the attacker is unable to get
+to data not readable to user bkp or to get root shell.
+
+Similarly, when duplicity uploads the backup set to the archive server, it
+uploads it to username archive@archive.  Immediately after upload, the cya
+script on the archive server chowns the newly created files (to root). 
+Therefore, if the user archive is ever compromised, the backup sets can't be
+deleted.
+
+Finally, note that the SSH keys to archive@archive are *not* stored on the
+target host.  When cya initiates a backup, it uses ssh-agent to forward
+authentication requests back to the archive host.  This makes key to archive
+harder to compromise in case of a breach of the target server.
+
+TODO:
+	* make duplicity non-signature tarballs unreadable to anyone but
+	  root. This would ensure that if archive@archive account is ever
+	  compromised the attacker can't get to the contents of the backups.
+
+	* make the backups encrypted, keeping the encryption key only on the
+	  target host (and a copy somewhere in a safe). This would make the
+	  backups completely unreadable on archive, so even in case of a
+	  full compromise of the archive server, the attacker won't be able
+	  to read the contents of the backups.
+

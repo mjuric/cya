@@ -1,0 +1,84 @@
+cya -- a multi-timescale backup organizer
+=========================================
+
+Mario Juric <mjuric@lsst.org>
+
+cya (pronnounced see-ya) is a driver for the Duplicity backup system that
+enables simultaneously making incremental Duplicity backups on varying
+time-scales (decade, year, month, week), while being very space efficient.
+
+For example, after running cya daily for 10 years and one day, you'd have:
+
+  * one full backup
+  * ten incremental yearly backups
+  * for each year, twelve monthly backups
+  * for each month, four weekly backups
+  * for each week, seven daily backups
+
+Assuming you keep only the last two weeks, last two months, last two years,
+and last two decades of backups in each set, you'd have:
+
+  * one full backup
+  * ten yearly backups (incremental)
+  * for the last two years, twelve monthly backups (each)
+  * in the last year, for the last two months, four weekly backups (each)
+  * in the last two weeks, seven daily backups (each)
+
+Assuming the first backup was made on Jan 1st 2012, after the backup on Dec
+31st 2021, you'll have the following increment chains:
+
+  * in the yearly set:  2012(full)->2013->2014->...->2021
+  * in the monthly set:
+	2012(full)->2013->2014->...->2021.Jan->
+	 ->2021.Feb->2021.Mar->...2021.Dec
+  * in the weekly set:
+	2012(full)->2013->2014->...->2021.Jan->
+	 ->2021.Feb->2021.Mar->...2021.Dec
+	 ->2021.Dec.wk1->...->2021.Dec.wk4
+  * and in the daily set:
+	2012(full)->2013->2014->...->2021.Jan->
+	 ->2021.Feb->2021.Mar->...2021.Dec
+	 ->2021.Dec.wk1->...->2021.Dec.wk4
+	 ->2021.Dec.wk4.day1->...->2021.Dec.wk4.day6
+
+The maximum length of the most frequent (daily) backup set is the sum of the
+maximum lenghts of the longer timescale ones (7+4 or 5+12+10=33 or 34 in a
+decade).
+
+cya achieves this by organizing duplicity backups in a directory tree, where
+each level in the tree corresponds to the timescale of a backup stored at
+that level. For example, a backup made on 2012-12-04 would be placed in a
+directory named:
+
+	2000/2010/2012/2012-12/2012-12-02
+
+where subdirectories correspond to century, decade, year, month and week,
+each holding backups for decades, years, months, weeks and days,
+respectively.
+
+If the 2012-12-04 backup was the first one ever made, the files in the leaf
+directory 2000/2010/2012/2012-12/2012-12-02 would also get hardlinked to
+2000/2010/2012/2012-12 (because it's the first weekly backup), and to
+2000/2010/2012 (because it's the first montly backup), and so on.
+
+When a backup is made on the next day, 2012-12-05, that day is still in the
+week of 2012-12-02, so an incremental backup would be made in
+2000/2010/2012/2012-12/2012-12-02. Equally so for all days through
+2012-12-08.
+
+On 2012-12-09, the destination directory will change to:
+
+	2000/2010/2012/2012-12/2012-12-02
+
+As it is empty, cya will look into one directory up the hierarchy to use as
+a basis for this (incremental) backup.  It will first hardlink all files
+from 2000/2010/2012/2012-12 into 2000/2010/2012/2012-12/2012-12-02, and then
+run an incremental duplicity backup.  Analogous procedure is repeated when
+the month/year/decade boundaries are crossed.
+
+In time, each level in the directory tree builds a set of incremental
+backups taken at different scales. It's likely desirable to keep this tree
+pruned, deleting all but two newest leaf directories at every level of the
+hierarchy.
+
+Right now, cya won't do it for you (it has to be done manually).

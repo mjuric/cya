@@ -1,0 +1,24 @@
+#!/usr/bin/ssh-agent /bin/bash
+
+ssh-add /etc/cya/keys/id_rsa
+
+ARCHIVE_HOST="scp://archive@moya.dev.lsstcorp.org"
+
+# Set umask to world-writable so that remotely-launched duplicity has have
+# write permissions to ~archive/backups when it logs in as archive (as any
+# directories created there will be temporarily owned by root)
+umask 0000
+
+cya()
+{
+	/opt/cya/cya --backup-cmd='sudo /etc/cya/backup' --dest-host "$ARCHIVE_HOST" "$@"
+}
+
+# Back up hosts
+cya bkp@trac.lsstcorp.org:/ ~archive/backups/trac.lsstcorp.org "$@"
+
+# change ownership, directory permissions, setting the sticky bit so file removal is possible
+# this is to prevent an attacker who gains access to the ~archive user from deleting the backups
+#
+find ~archive/backups/* -type d -print0 | xargs -0 chmod 1777
+chown -R root.root ~archive/backups/*

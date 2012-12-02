@@ -1,0 +1,3 @@
+#!/bin/bash
+
+setfacl --restore=.dupext/acl.txt
