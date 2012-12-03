@@ -62,7 +62,7 @@ if __name__ == "__main__":
 	fp2.close()
 
 	# ACLs, excluding excluded directories
-	cmd = ["find", args.source_directory] + exclude_pat + ['-printf', "%P\\0"]
+	cmd = ["find", args.source_directory] + exclude_pat + ['!', '-type', 's', '-a'] + ['-printf', "%P\\0"]
 	p1 = subprocess.Popen(cmd, stdout=subprocess.PIPE)
 	p2 = subprocess.Popen(shlex.split("xargs -0 getfacl -n"), stdin=p1.stdout, stdout=subprocess.PIPE, cwd=args.source_directory)
 	p1.stdout.close()  # Allow p1 to receive a SIGPIPE if p2 exits.
@@ -71,8 +71,8 @@ if __name__ == "__main__":
 		fp.write(line)
 	fp.close()
 
-	# ACLs, excluding excluded directories
-	cmd = ["find", args.source_directory] + exclude_pat + ['-printf', "%P\\0"]
+	# ACLs, excluding excluded directories and sockets
+	cmd = ["find", args.source_directory] + exclude_pat + ['!', '-type', 's', '-a'] + ['-printf', "%P\\0"]
 	p1 = subprocess.Popen(cmd, stdout=subprocess.PIPE)
 	p2 = subprocess.Popen(shlex.split("xargs -0 getfattr -h -m . -d"), stdin=p1.stdout, stdout=subprocess.PIPE, cwd=args.source_directory)
 	p1.stdout.close()  # Allow p1 to receive a SIGPIPE if p2 exits.

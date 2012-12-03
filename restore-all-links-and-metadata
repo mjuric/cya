@@ -25,5 +25,5 @@ perl -e '
 '
 
 setfacl --restore=.dupext/acl.txt
-setfattr -h --restore=.dupext/xattr.txt
+setfattr -h --restore=.dupext/attr.txt
 
