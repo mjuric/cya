@@ -32,7 +32,7 @@ class Backup(object):
 
 	def incremental_backup(self, dest_dir):
 		print "Backing up to %s" % (dest_dir)
-		cmd = ["ssh", "-CA", self.src_host, self.backup_cmd, self.src_dir, '%s/%s' % (self.dest_host, self.dest_dir), self.backup_cmd_opts]
+		cmd = ["ssh", "-CA", self.src_host, self.backup_cmd, self.src_dir, '%s/%s' % (self.dest_host, dest_dir), self.backup_cmd_opts]
 		print "Executing: %s" % (" ".join((pipes.quote(s) for s in cmd)))
 #		subprocess.check_call(cmd)
 		p = subprocess.Popen(cmd, stdout=subprocess.PIPE)
