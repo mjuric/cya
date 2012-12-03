@@ -65,7 +65,7 @@ if __name__ == "__main__":
 	# ACLs, excluding excluded directories
 	cmd = ["find", args.source_directory] + exclude_pat + ['!', '-type', 's', '-a'] + ['-printf', "%P\\0"]
 	p1 = subprocess.Popen(cmd, stdout=subprocess.PIPE)
-	p2 = subprocess.Popen(shlex.split("xargs -0 getfacl -h -n"), stdin=p1.stdout, stdout=subprocess.PIPE, cwd=args.source_directory)
+	p2 = subprocess.Popen(shlex.split("xargs -0 getfacl -n"), stdin=p1.stdout, stdout=subprocess.PIPE, cwd=args.source_directory)
 	p1.stdout.close()  # Allow p1 to receive a SIGPIPE if p2 exits.
 	fp = open(os.path.join(dupext_dir, "acl.txt"), "w")
 	for line in p2.stdout:
