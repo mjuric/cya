@@ -12,10 +12,9 @@ import os, atexit, collections, itertools, os, os.path, argparse, shutil, pipes,
 if __name__ == "__main__":
 	parser = argparse.ArgumentParser(description='Duplicity driver that stores ACLs, xattrs and apropriately handles hardlinks')
 	parser.add_argument('source_directory', type=str, help='Directory to back up')
-	parser.add_argument('duplicity_args', type=str, metavar='args', nargs=argparse.REMAINDER, help='Arguments passed to Duplicity')
 	parser.add_argument('--exclude', type=str, action='append', help='These directives must come before any duplicity_args' )
 
-	args = parser.parse_args()
+	args, _ = parser.parse_known_args()
 
 	# Create .dupext dir, and ensure .dupext is deleted on exit
 	dupext_dir = os.path.join(args.source_directory, '.dupext')
