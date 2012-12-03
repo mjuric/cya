@@ -1,0 +1,3 @@
+#!/usr/bin/bash
+
+setfattr -h --restore=.dupext/attr.txt

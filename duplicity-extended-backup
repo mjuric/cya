@@ -23,8 +23,9 @@ if __name__ == "__main__":
 		os.mkdir(dupext_dir)
 
 	# copy the restore script
-	restore_script = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'restore-all-links-and-metadata')
-	shutil.copy2(restore_script, dupext_dir)
+	for fn in ['restore-hard-links', 'restore-acl', 'restore-attr']:
+		path = os.path.join(os.path.dirname(os.path.abspath(__file__)), fn)
+		shutil.copy2(path, dupext_dir)
 
 	# construct 'find' exclusions based on --exclude directives. This should go first in find commands.
 	exclusions = [ dupext_dir ] + args.exclude

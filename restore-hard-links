@@ -1,0 +1,17 @@
+#!/usr/bin/perl
+
+$/ = "\0";
+open FH, ".dupext/hardlinks.txtz";
+while(<FH>)
+{
+	chomp;
+	($i, $l, $fn) = /^(\d+) (\d+) (.*)/s;
+	if($i == $i0)
+	{
+		link $fn0, $fn or die("Failed to link $fn0 to $fn\n");
+	}
+	else
+	{
+		$i0 = $i; $fn0 = $fn;
+	}
+}
