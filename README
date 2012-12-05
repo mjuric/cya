@@ -82,3 +82,13 @@ pruned, deleting all but two newest leaf directories at every level of the
 hierarchy.
 
 Right now, cya won't do it for you (it has to be done manually).
+
+Features to be documented
+=========================
+
+These are all in the code (and used in practice), but so far undocumented
+beyond the actual code:
+
+* extending duplicity to efficiently store hardlinks
+* extending duplicity to store ACLs and xattrs
+* self-consistent backups using LVM snapshots
