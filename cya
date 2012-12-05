@@ -1,8 +1,8 @@
 #!/usr/bin/env python
 #
-#	mbackup.py <source_url_url> <base_dest_dir>
+#	$0 <source_url_url> <base_dest_dir>
 #
-#	Example: mbackup.py root@moya.dev.lsstcorp.org:/etc mjuric@archive.lsstcorp.org:/data/backups/moya
+#	Example: $0 root@moya.dev.lsstcorp.org:/etc mjuric@archive.lsstcorp.org:/data/backups/moya
 #
 
 import time, os, os.path, glob, datetime, subprocess, itertools, argparse, socket, getpass, pipes, shlex
@@ -30,12 +30,17 @@ class Backup(object):
 		return new_files
 
 	def full_backup(self, dest_dir):
-		return self.incremental_backup(dest_dir)
+		print "Full backup in %s" % (dest_dir)
+		return self.run_backup_cmd(dest_dir)
 
 	def incremental_backup(self, dest_dir):
-		print "Backing up to %s" % (dest_dir)
+		print "Incremental backup in %s" % (dest_dir)
+		return self.run_backup_cmd(dest_dir)
+
+	def run_backup_cmd(self, dest_dir):
 		cmd = ["ssh", "-CA"] + shlex.split(self.ssh_opts) + [self.src_host, self.backup_cmd, self.src_dir, '%s/%s' % (self.dest_host, dest_dir), self.backup_cmd_opts]
-		print "Executing: %s" % (" ".join((pipes.quote(s) for s in cmd)))
+		#print "Executing: %s" % (" ".join((pipes.quote(s) for s in cmd)))
+		print "Running '%s' on %s" % (self.backup_cmd, self.src_host)
 		p = subprocess.Popen(cmd, stdout=subprocess.PIPE)
 		for line in p.stdout:
 			print "--- %s" % (line),
@@ -104,12 +109,10 @@ class Backup(object):
 		self._now = kwargs['now']
 
 	def run(self):
-		print "Adding backup to %s (for time=%s)" % (self.dest_dir, self._now)
+		print "Time: %s" % self._now
+		print "Adding to backup set: %s" % (self.dest_dir)
 		self.do_backup(self.dest_dir)
 		print "Finished backup to %s" % (self.dest_dir)
-
-#./mbackup.py mjuric@moya.dev.lsstcorp.org:/data/backups/moya_test /data/backups/moya \
-#             --backup-cmd-opts="--volsize 100 --no-encryption" --backup-cmd=duplicity-extended-backup
 
 if __name__ == "__main__":
 	# autodetect dest_host URL
