@@ -1,6 +1,8 @@
 cya -- a multi-timescale backup organizer
 =========================================
 
+Mario Juric <mjuric@lsst.org>
+
 cya (pronnounced see-ya) is a driver for the Duplicity backup system that
 enables simultaneously making incremental Duplicity backups on varying
 time-scales (decade, year, month, week), while being very space efficient.
