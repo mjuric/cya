@@ -5,6 +5,8 @@ set -e
 # snapshot mount point
 S="/root/snapshot_root"
 
+DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+
 # Find the device the source directory maps to
 BOOT=no
 while read line; do
@@ -36,8 +38,11 @@ fi
 
 trap "$UM umount $S && lvremove -f /dev/$VG/bkp_snap" EXIT
 
+mkdir -p $S/.dupext
+"$DIR"/get-partition-data > $S/.dupext/partition-info.txt
+
 shift;
-/opt/mbackup/duplicity-extended-backup $S \
+"$DIR"/duplicity-extended-backup $S \
 	--asynchronous-upload --volsize 100 --no-encryption \
 	--exclude $S/tmp/\* \
 	--exclude $S/root/.cache/duplicity \
