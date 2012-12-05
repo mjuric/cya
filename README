@@ -70,13 +70,15 @@ On 2012-12-09, the destination directory will change to:
 
 	2000/2010/2012/2012-12/2012-12-02
 
-as it is empty, cya will look into one directory up the hierarchy to use as
-a basis for this (incremental) backup.  It will hardlink all files from
-2000/2010/2012/2012-12 into 2000/2010/2012/2012-12/2012-12-02, and run an
-incremental duplicity backup.  Analogous procedure is repeated when the
-month/year/decade boundaries are crossed.
+As it is empty, cya will look into one directory up the hierarchy to use as
+a basis for this (incremental) backup.  It will first hardlink all files
+from 2000/2010/2012/2012-12 into 2000/2010/2012/2012-12/2012-12-02, and then
+run an incremental duplicity backup.  Analogous procedure is repeated when
+the month/year/decade boundaries are crossed.
 
 In time, each level in the directory tree builds a set of incremental
 backups taken at different scales. It's likely desirable to keep this tree
-trimmed, deleting all but two newest leaf directories at every level of the
-hierarchy. For now, this has to be done manually (cya won't do it for you).
+pruned, deleting all but two newest leaf directories at every level of the
+hierarchy.
+
+Right now, cya won't do it for you (it has to be done manually).
