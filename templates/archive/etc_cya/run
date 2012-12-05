@@ -1,0 +1,17 @@
+#!/bin/bash
+
+ARCHIVE_HOST="scp://archive@moya.dev.lsstcorp.org"
+
+cya()
+{
+	/opt/cya/cya --ssh-opts='-i /etc/cya/keys/id_rsa' --backup-cmd='sudo /etc/cya/backup' --dest-host "$ARCHIVE_HOST" "$@"
+}
+
+# Back up hosts
+cya bkp@trac.lsstcorp.org:/ ~archive/backups/trac.lsstcorp.org "$@"
+
+# change ownership, directory permissions, setting the sticky bit so file removal is possible
+# this is to prevent an attacker who gains access to the ~archive user from deleting the backups
+#
+chown -R root.root ~archive/backups/*
+find ~archive/backups/* -type d -print0 | xargs -0 chmod 1777
