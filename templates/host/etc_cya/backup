@@ -1,0 +1,10 @@
+#!/bin/bash
+
+UPLOAD_URL_PREFIX="scp://archive@moya.dev.lsstcorp.org/"
+
+# security: don't upload to a host we don't know about
+[[ $2 == $UPLOAD_URL_PREFIX* ]] || 
+	{ echo "Destination does not begin with# $UPLOAD_URL_PREFIX. Refusing to backup to an unknown host. Go away!"; exit -1; }
+
+# start the backup
+/opt/cya/duplicity-ex-snap "$@"
