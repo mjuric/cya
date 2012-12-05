@@ -5,7 +5,7 @@
 #	Example: mbackup.py root@moya.dev.lsstcorp.org:/etc mjuric@archive.lsstcorp.org:/data/backups/moya
 #
 
-import time, os, os.path, glob, datetime, subprocess, itertools, argparse, socket, getpass, pipes
+import time, os, os.path, glob, datetime, subprocess, itertools, argparse, socket, getpass, pipes, shlex
 
 class Backup(object):
 	dest_base = None		# Backup directory tree base (path)
@@ -18,6 +18,8 @@ class Backup(object):
 
 	backup_cmd = 'duplicity'	# Backup command to use on the remote end
 	backup_cmd_opts = None		# Duplicity options
+
+	ssh_opts = None			# Extra options to pass to ssh when contacting the host to be backed up
 
 	def hardlink(self, files, dest_dir):
 		new_files = [ os.path.join(dest_dir, os.path.basename(fn)) for fn in files ]
@@ -32,9 +34,8 @@ class Backup(object):
 
 	def incremental_backup(self, dest_dir):
 		print "Backing up to %s" % (dest_dir)
-		cmd = ["ssh", "-CA", self.src_host, self.backup_cmd, self.src_dir, '%s/%s' % (self.dest_host, dest_dir), self.backup_cmd_opts]
+		cmd = ["ssh", "-CA"] + shlex.split(self.ssh_opts) + [self.src_host, self.backup_cmd, self.src_dir, '%s/%s' % (self.dest_host, dest_dir), self.backup_cmd_opts]
 		print "Executing: %s" % (" ".join((pipes.quote(s) for s in cmd)))
-#		subprocess.check_call(cmd)
 		p = subprocess.Popen(cmd, stdout=subprocess.PIPE)
 		for line in p.stdout:
 			print "--- %s" % (line),
@@ -94,6 +95,7 @@ class Backup(object):
 		self.src_host, self.src_dir = self.src_url.split(":")
 
 		self.dest_dir = os.path.join(self.dest_base, self.date2dir(kwargs['now']))
+		self.ssh_opts = kwargs['ssh_opts']
 
 		self.dest_host = kwargs['dest_host']
 		self.backup_cmd = kwargs['backup_cmd']
@@ -122,6 +124,7 @@ if __name__ == "__main__":
 	parser.add_argument('dest_base', type=str, help='Backup destination directory')
 
 	parser.add_argument('--dest-host', dest='dest_host', default=dest_host, required=dest_host is None, help='Host part of the backup destination server. Must be in Duplicity URI format.')
+	parser.add_argument('--ssh-opts', dest='ssh_opts', default='', help='Extra options to pass to ssh when connecting to the host to be backed up.')
 	parser.add_argument('--backup-cmd', dest='backup_cmd', default='duplicity', help='The command to run on the backup target to have it backed up.')
 	parser.add_argument('--backup-cmd-opts', dest='backup_cmd_opts', default='', help='Options to pass to the backup command.')
 
