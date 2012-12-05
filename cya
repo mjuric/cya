@@ -108,9 +108,6 @@ class Backup(object):
 		self.do_backup(self.dest_dir)
 		print "Finished backup to %s" % (self.dest_dir)
 
-#./mbackup.py mjuric@moya.dev.lsstcorp.org:/data/backups/moya_test /data/backups/moya \
-#             --backup-cmd-opts="--volsize 100 --no-encryption" --backup-cmd=duplicity-extended-backup
-
 if __name__ == "__main__":
 	# autodetect dest_host URL
 	dest_host = socket.gethostbyname(socket.getfqdn())

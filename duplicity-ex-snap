@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# duplicity-extended-backup-with-snapshot <dir_to_back_up> <duplicity_args...>
+# $0 <dir_to_back_up> <duplicity_args...>
 #
 # Snapshots an LVM volume befor backing up the requested directory.
 #
@@ -44,10 +44,10 @@ fi
 trap "$UM umount $S && lvremove -f /dev/$VG/bkp_snap" EXIT
 
 mkdir -p $S/.dupext
-"$DIR"/get-partition-data > $S/.dupext/partition-info.txt
+"$DIR"/scripts/get-partition-data > $S/.dupext/partition-info.txt
 
 shift;
-"$DIR"/duplicity-extended-backup $S \
+"$DIR"/duplicity-ex $S \
 	--asynchronous-upload --volsize 100 --no-encryption \
 	--exclude $S/tmp/\* \
 	--exclude $S/root/.cache/duplicity \
