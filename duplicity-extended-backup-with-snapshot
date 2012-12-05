@@ -1,9 +1,14 @@
 #!/bin/bash
+#
+# duplicity-extended-backup-with-snapshot <dir_to_back_up> <duplicity_args...>
+#
+# Snapshots an LVM volume befor backing up the requested directory.
+#
 
 set -e
 
 # snapshot mount point
-S="/root/snapshot_root"
+S="/.snap"
 
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 
