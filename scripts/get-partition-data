@@ -1,0 +1,21 @@
+#!/bin/bash
+
+#echo "######### parted -sm DEV unit B print"
+#for dev in $(blkid | awk -F: '{print $1}'); do
+#	parted -sm $dev unit B print | grep -v "Error:"
+#done
+
+echo "######### fdisk -lu"
+fdisk -lu
+
+echo "######### blkid"
+blkid					
+
+echo "######### lvs --units m --nosuffix --separator :"
+lvs --units m --nosuffix --separator :
+
+echo "######### pvs --units m --nosuffix --separator :"
+pvs --units m --nosuffix --separator :
+
+echo "######### vgs --units m --nosuffix --separator :"
+vgs --units m --nosuffix --separator :
