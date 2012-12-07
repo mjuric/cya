@@ -5,21 +5,15 @@
 #	Example: $0 root@moya.dev.lsstcorp.org:/etc mjuric@archive.lsstcorp.org:/data/backups/moya
 #
 
+# /opt/cya/cya "ssh -CYA bkp@trac.lsstcorp.org duplicity-ex / scp://moya.dev.lsstcorp.org/%(dest)s" ~archive/backups/trac.lsstcorp.org 
+# /opt/cya/cya "ssh -CYA bkp@trac.lsstcorp.org %(dest)s" ~archive/backups/trac.lsstcorp.org 
+# cya ~archive/backups/tests "ssh -CYA bkp@trac.lsstcorp.org duplicity /home/mjuric scp://moya.dev.lsstcorp.org/%(dest)s --no-encryption --asynchronous-upload --volsize 100"
+
 import time, os, os.path, glob, datetime, subprocess, itertools, argparse, socket, getpass, pipes, shlex
 
 class Backup(object):
-	dest_base = None		# Backup directory tree base (path)
-	dest_host = None		# Host name for Duplicity the destination machine to use
-					# to connect from the destination machine (may include the username)
-					# Will be passed to duplicity using scp:// protocol.
-	src_url = None			# URL to the machine to be backed up
-	src_host = None			# Host part of src_url (may include the username). Will be passed to ssh.
-	src_dir = None			# Directory part of src_dest.
-
-	backup_cmd = 'duplicity'	# Backup command to use on the remote end
-	backup_cmd_opts = None		# Duplicity options
-
-	ssh_opts = None			# Extra options to pass to ssh when contacting the host to be backed up
+	backup_set_base = None		# Backup directory tree base (path)
+	backup_cmd = None		# Backup command pattern
 
 	def hardlink(self, files, dest_dir):
 		new_files = [ os.path.join(dest_dir, os.path.basename(fn)) for fn in files ]
@@ -29,18 +23,18 @@ class Backup(object):
 			os.link(src, new)
 		return new_files
 
-	def full_backup(self, dest_dir):
-		print "Full backup in %s" % (dest_dir)
-		return self.run_backup_cmd(dest_dir)
+	def no_backups_exist(self, dir):
+		# Check if any backups exist in the directory
+		# NOTE: duplicity specific
+		for fn in glob.iglob(os.path.join(dir, '*.manifest')):
+			return False
+		return True
 
-	def incremental_backup(self, dest_dir):
-		print "Incremental backup in %s" % (dest_dir)
-		return self.run_backup_cmd(dest_dir)
-
-	def run_backup_cmd(self, dest_dir):
-		cmd = ["ssh", "-CA"] + shlex.split(self.ssh_opts) + [self.src_host, self.backup_cmd, self.src_dir, '%s/%s' % (self.dest_host, dest_dir), self.backup_cmd_opts]
-		#print "Executing: %s" % (" ".join((pipes.quote(s) for s in cmd)))
-		print "Running '%s' on %s" % (self.backup_cmd, self.src_host)
+	def run_backup(self, dest_dir, full=False):
+		cmd = shlex.split(self.backup_cmd % { 'dest': dest_dir, 'full': full });
+		print "Executing: %s" % (" ".join((pipes.quote(s) for s in cmd)))
+		exit()
+		print "Performing backup:"
 		p = subprocess.Popen(cmd, stdout=subprocess.PIPE)
 		for line in p.stdout:
 			print "--- %s" % (line),
@@ -52,29 +46,22 @@ class Backup(object):
 		files = [ fn for fn in (os.path.join(dest_dir, f) for f in os.listdir(dest_dir)) if os.path.isfile(fn) ]
 		return files
 
-	def no_backups_exist(self, dir):
-		# Check if any backups exist in the directory
-		for fn in glob.iglob(os.path.join(dir, '*.manifest')):
-			return False
-		return True
-
 	def do_backup(self, dest_dir):
 		#print 'do_backup:', self.src_url, dest_dir
 
 		if not os.path.exists(dest_dir):
 			os.makedirs(dest_dir)
 
-
 		if self.no_backups_exist(dest_dir):
 			up_dir = os.path.dirname(dest_dir)
-			if up_dir == self.dest_base:
-				return self.full_backup(dest_dir)
+			if up_dir == self.backup_set_base:
+				return self.run_backup(dest_dir, full=True)
 
 			files = self.do_backup(up_dir)
 			files = self.hardlink(files, dest_dir)
 			print "Hardlinked from %s" % (dest_dir)
 		else:
-			files = self.incremental_backup(dest_dir)
+			files = self.run_backup(dest_dir, full=False)
 
 		return files
 
@@ -94,47 +81,31 @@ class Backup(object):
 
 		return dir
 
-	def __init__(self, **kwargs):
-		self.dest_base = kwargs['dest_base']
-		self.src_url = kwargs['src_url']
-		self.src_host, self.src_dir = self.src_url.split(":")
-
-		self.dest_dir = os.path.join(self.dest_base, self.date2dir(kwargs['now']))
-		self.ssh_opts = kwargs['ssh_opts']
-
-		self.dest_host = kwargs['dest_host']
-		self.backup_cmd = kwargs['backup_cmd']
-		self.backup_cmd_opts = kwargs['backup_cmd_opts']
-		
-		self._now = kwargs['now']
-
 	def run(self):
 		print "Time: %s" % self._now
-		print "Adding to backup set: %s" % (self.dest_dir)
-		self.do_backup(self.dest_dir)
-		print "Finished backup to %s" % (self.dest_dir)
+		print "Adding to backup set: %s" % (self._dest_dir)
+		self.do_backup(self._dest_dir)
+		print "Finished backup to %s" % (self._dest_dir)
+
+	def __init__(self, **kwargs):
+		self.backup_set_base = kwargs['backup_set_base']
+		self.backup_cmd = kwargs['backup_cmd']
+
+		self._dest_dir = os.path.join(self.backup_set_base, self.date2dir(kwargs['now']))
+
+		self._now = kwargs['now']
+
 
 if __name__ == "__main__":
-	# autodetect dest_host URL
-	dest_host = socket.gethostbyname(socket.getfqdn())
-	if dest_host == '127.0.0.1':
-		dest_host = None
-	else:
-		dest_host = 'scp://' + dest_host
-
 	parser = argparse.ArgumentParser(description='Multi-timescale backup driver')
-	parser.add_argument('src_url', type=str, help='Backup source URL')
-	parser.add_argument('dest_base', type=str, help='Backup destination directory')
-
-	parser.add_argument('--dest-host', dest='dest_host', default=dest_host, required=dest_host is None, help='Host part of the backup destination server. Must be in Duplicity URI format.')
-	parser.add_argument('--ssh-opts', dest='ssh_opts', default='', help='Extra options to pass to ssh when connecting to the host to be backed up.')
-	parser.add_argument('--backup-cmd', dest='backup_cmd', default='duplicity', help='The command to run on the backup target to have it backed up.')
-	parser.add_argument('--backup-cmd-opts', dest='backup_cmd_opts', default='', help='Options to pass to the backup command.')
+	parser.add_argument('backup_set_base', type=str, help='Backup set directory (where to back up)')
+	parser.add_argument('backup_cmd', type=str, help='Backup command pattern')
 
 	parser.add_argument('--force-time', dest='now', default=str(datetime.datetime.today()), metavar='T', help='Force the current time to be T. Must be formatted as "YYYY-MM-DD [HH-MM-SS[.SS]]"')
 
 	args = parser.parse_args()
 
+	# Parse the time string
 	try:
 		args.now = datetime.datetime.strptime(args.now, '%Y-%m-%d %H:%M:%S.%f')
 	except ValueError:

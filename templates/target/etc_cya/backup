@@ -1,10 +1,12 @@
 #!/bin/bash
+#
+# This file will be sudo-executed by cya_shell. Perform your backup from here.
+#
+# It will be given a single argument, the directory on the archive server to
+# which to upload the backup.
+#
 
-UPLOAD_URL_PREFIX="scp://archive@moya.dev.lsstcorp.org/"
-
-# security: don't upload to a host we don't know about
-[[ $2 == $UPLOAD_URL_PREFIX* ]] || 
-	{ echo "Destination does not begin with# $UPLOAD_URL_PREFIX. Refusing to backup to an unknown host. Go away!"; exit -1; }
-
-# start the backup
-/opt/cya/duplicity-ex-snap "$@"
+exec duplicity / "scp://archive@140.252.24.70/$1" \
+	--no-encryption --asynchronous-upload --volsize 100 \
+	--exclude /var --exclude /dev --exclude /proc --exclude /selinux --exclude /sys --exclude /cgroup \
+	--exclude /data --exclude /home --exclude /root
