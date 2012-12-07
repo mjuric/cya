@@ -11,21 +11,24 @@
 
 import time, os, os.path, glob, datetime, subprocess, itertools, argparse, socket, getpass, pipes, shlex
 
+def hardlink(files, dest_dir):
+	new_files = [ os.path.join(dest_dir, os.path.basename(fn)) for fn in files ]
+	for src, new in itertools.izip(files, new_files):
+		#print 'hardlink: ', new, '->', src
+		os.link(src, new)
+	return new_files
+
+def hardlink_dir_contents(src_dir, dest_dir):
+	files = [ fn for fn in (os.path.join(src_dir, f) for f in os.listdir(src_dir)) if os.path.isfile(fn) ]
+	return hardlink(files, dest_dir)
+
 class Backup(object):
 	backup_set_base = None		# Backup directory tree base (path)
 	backup_cmd = None		# Backup command pattern
 
-	def hardlink(self, files, dest_dir):
-		new_files = [ os.path.join(dest_dir, os.path.basename(fn)) for fn in files ]
-		#print '===', dest_dir
-		for src, new in itertools.izip(files, new_files):
-			#print 'hardlink: ', new, '->', src
-			os.link(src, new)
-		return new_files
-
 	def no_backups_exist(self, dir):
 		# Check if any backups exist in the directory
-		# NOTE: duplicity specific
+		# NOTE: duplicity specific check!
 		for fn in glob.iglob(os.path.join(dir, '*.manifest')):
 			return False
 		return True
@@ -33,7 +36,6 @@ class Backup(object):
 	def run_backup(self, dest_dir, full=False):
 		cmd = shlex.split(self.backup_cmd % { 'dest': dest_dir, 'full': full });
 		print "Executing: %s" % (" ".join((pipes.quote(s) for s in cmd)))
-		exit()
 		print "Performing backup:"
 		p = subprocess.Popen(cmd, stdout=subprocess.PIPE)
 		for line in p.stdout:
@@ -58,7 +60,7 @@ class Backup(object):
 				return self.run_backup(dest_dir, full=True)
 
 			files = self.do_backup(up_dir)
-			files = self.hardlink(files, dest_dir)
+			files = hardlink(files, dest_dir)
 			print "Hardlinked from %s" % (dest_dir)
 		else:
 			files = self.run_backup(dest_dir, full=False)
@@ -95,8 +97,7 @@ class Backup(object):
 
 		self._now = kwargs['now']
 
-
-if __name__ == "__main__":
+def main():
 	parser = argparse.ArgumentParser(description='Multi-timescale backup driver')
 	parser.add_argument('backup_set_base', type=str, help='Backup set directory (where to back up)')
 	parser.add_argument('backup_cmd', type=str, help='Backup command pattern')
@@ -116,3 +117,6 @@ if __name__ == "__main__":
 
 	bkp = Backup(**vars(args))
 	bkp.run()
+
+if __name__ == "__main__":
+	main()

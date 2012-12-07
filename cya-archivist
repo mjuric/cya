@@ -1,0 +1,168 @@
+#!/usr/bin/env python
+#
+# cya-archivist ~archive/trac.lsstcorp.org
+#
+
+import time, os, os.path, glob, datetime, itertools, argparse, stat, pwd
+
+class Backup(object):
+	backup_set_base = None		# Backup directory tree base (path)
+	archive_user = None		# username of the archive user
+
+	def date2dir(self, t):
+		# Round down to the start of the week (weeks begin on Sunday)
+		d = t.date()
+		d -= datetime.timedelta((d.weekday() + 1) % 7)
+
+		# Extract info, construct path
+		dir = os.path.join(
+			"%04d" % (d.year - d.year % 100),	# century
+			"%04d" % (d.year - d.year % 10), 	# decade
+			"%04d" % (d.year),			# year
+			d.strftime("%Y-%m"),			# year-month
+			d.isoformat()				# year-month-week
+			)
+
+		return dir
+
+	def process_finished(self):
+		# find current and leaf backup levels
+		(current, leaf) = open(os.path.join(self.info_fn)).read().splitlines()
+		n = leaf.count('/') - current.count('/') + 1
+
+		print n, current, leaf
+
+		# find files to hardlink
+		files = list(itertools.chain.from_iterable(glob.glob(os.path.join(self.finished_dir, pat)) for pat in ['*.difftar.gz', '*.sigtar.gz', '*.manifest']))
+		files = zip(files, [ os.path.basename(fn) for fn in files ])
+
+		# hardlink to each level
+		uid, gid = os.getuid(), os.getgid()
+		for i in xrange(n):
+			# Create the 'files' directory if it doesn't exist
+			dest_dir = os.path.join(self.backup_set_base, leaf, 'files')
+			if not os.path.exists(dest_dir):
+				os.makedirs(dest_dir, 0700)
+
+			print dest_dir
+
+			# Link files to destination directory
+			for fn_from, fn_to in files:
+				fn_to = os.path.join(dest_dir, fn_to)
+				if os.path.exists(fn_to):
+					assert os.path.samefile(fn_from, fn_to)
+				else:
+					os.link(fn_from, fn_to)
+				os.chown(fn_to, uid, gid)
+				os.chmod(fn_to, stat.S_IRUSR | stat.S_IWUSR)
+
+			# next leaf
+			leaf = os.path.dirname(leaf)
+
+		# dispose of 'finished', but do it carefully (remember we're running as root!)
+		for fn, _ in files:
+			assert(os.path.dirname(fn) == self.finished_dir)
+			os.unlink(fn)
+		os.rmdir(self.finished_dir)
+
+	def backups_exist(self, level):
+		path = os.path.join(level, 'files')
+		if not os.path.exists(path):
+			return False
+
+		for fn in glob.iglob(os.path.join(path, '*.manifest')):
+			return True
+
+		return False
+
+	def next_backup_level(self, dest_level):
+		while not self.backups_exist(dest_level) and os.path.dirname(dest_level) != self.backup_set_base:
+			dest_level = os.path.dirname(dest_level)
+
+		return dest_level
+
+	def run(self):
+		arch_uid, arch_gid = pwd.getpwnam(self.archive_user)[2:4]
+
+		# auto-create backup_set base, with conservative permissions
+		if not os.path.exists(self.backup_set_base):
+			os.makedirs(self.backup_set_base)
+			os.chmod(self.backup_set_base, stat.S_IRUSR | stat.S_IWUSR | stat.S_IXUSR)
+
+		# auto-create 'incoming' directory, with archive user as the owner
+		if not os.path.exists(self.incoming_dir):
+			os.makedirs(self.incoming_dir)
+			os.chown(self.incoming_dir, arch_uid, arch_gid)
+
+		# check if the 'next' directory doesn't exist, signaling that
+		# a new backup set has been submitted. Exit otherwise.
+		if os.path.exists(self.next_dir):
+			return
+
+		# process the finished backup set
+		if os.path.exists(self.finished_dir):
+			self.process_finished()
+
+		# find the backup level
+		level = self.next_backup_level(self._dest_dir)
+
+		# store the level and leaf level paths to 'info' file
+		fp = open(self.info_fn, "w")
+		fp.write(os.path.relpath(level, self.backup_set_base) + '\n')
+		fp.write(os.path.relpath(self._dest_dir, self.backup_set_base) + '\n')
+		fp.close()
+
+		# change permissions so the archive user can write into the directory
+		# also make sure the archive user can write into incoming (so they can 'mv next finished')
+		next_tmp = self.next_dir + '.tmp'
+		os.mkdir(next_tmp)
+		os.chown(next_tmp, arch_uid, arch_gid)
+
+		# hardlink needed duplicity files from dest to next_tmp
+		files = itertools.chain.from_iterable(glob.glob(os.path.join(level, 'files', pat)) for pat in ['*.sigtar.gz', '*.manifest'])
+		for fn_from in files:
+			fn_to = os.path.join(next_tmp, os.path.basename(fn_from))
+			#print 'LINK:', fn_from, fn_to
+			os.link(fn_from, fn_to)
+			os.chmod(fn_to, stat.S_IRUSR | stat.S_IWUSR | stat.S_IRGRP)
+			os.chown(fn_to, -1, arch_gid)
+
+		# move next_tmp to next
+		os.rename(next_tmp, self.next_dir)
+
+	def __init__(self, **kwargs):
+		self.backup_root = os.path.realpath(kwargs['backup_root'])
+		self.archive_user = kwargs['archive_user']
+
+		self.backup_set_base = os.path.join(self.backup_root, 'backups')
+		self.incoming_dir    = os.path.join(self.backup_root, 'incoming')
+		self.next_dir        = os.path.join(self.incoming_dir, 'next')
+		self.finished_dir    = os.path.join(self.incoming_dir, 'finished')
+		self.info_fn         = os.path.join(self.backup_root, 'next_info')
+
+		self._now = kwargs['now']
+		self._dest_dir = os.path.join(self.backup_set_base, self.date2dir(self._now))
+
+if __name__ == "__main__":
+	parser = argparse.ArgumentParser(description='Multi-timescale backup driver')
+	parser.add_argument('backup_root', type=str, help='Backup root directory (where to back up)')
+
+	parser.add_argument('--force-time', dest='now', default=str(datetime.datetime.today()), metavar='T', help='Force the current time to be T. Must be formatted as "YYYY-MM-DD [HH-MM-SS[.SS]]"')
+	parser.add_argument('--archive-user', default='archive', metavar='USERNAME', help='Username of the user that writes backups to .../incoming/next directory.')
+
+	args = parser.parse_args()
+
+	if not os.path.isdir(args.backup_root):
+		print "'%s' must exist and be a directory." % args.backup_root
+		exit(-1)
+
+	# Parse the time string
+	try:
+		args.now = datetime.datetime.strptime(args.now, '%Y-%m-%d %H:%M:%S.%f')
+	except ValueError:
+		try:
+			args.now = datetime.datetime.strptime(args.now, '%Y-%m-%d %H:%M:%S')
+		except ValueError:
+			args.now = datetime.datetime.strptime(args.now, '%Y-%m-%d')
+
+	Backup(**vars(args)).run()
