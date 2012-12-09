@@ -3,7 +3,7 @@
 # cya-archivist ~archive/trac.lsstcorp.org
 #
 
-import time, os, os.path, glob, datetime, itertools, argparse, stat, pwd
+import time, os, os.path, glob, datetime, itertools, argparse, stat, pwd, sys
 
 class Backup(object):
 	backup_set_base = None		# Backup directory tree base (path)
@@ -87,19 +87,18 @@ class Backup(object):
 
 		return dest_level
 
+	def init_backup_dir(self):
+		os.makedirs(self.backup_root)
+
+		# backup directory must be unreadable by all but owner
+		os.mkdir(self.backup_set_base)
+		os.chmod(self.backup_set_base, stat.S_IRUSR | stat.S_IWUSR | stat.S_IXUSR)
+
+		# incoming directory must be writable by the archive user
+		os.makedirs(self.incoming_dir)
+		os.chown(self.incoming_dir, self._arch_uid, self._arch_gid)
+
 	def run(self):
-		arch_uid, arch_gid = pwd.getpwnam(self.archive_user)[2:4]
-
-		# auto-create backup_set base, with conservative permissions
-		if not os.path.exists(self.backup_set_base):
-			os.makedirs(self.backup_set_base)
-			os.chmod(self.backup_set_base, stat.S_IRUSR | stat.S_IWUSR | stat.S_IXUSR)
-
-		# auto-create 'incoming' directory, with archive user as the owner
-		if not os.path.exists(self.incoming_dir):
-			os.makedirs(self.incoming_dir)
-			os.chown(self.incoming_dir, arch_uid, arch_gid)
-
 		# check if the 'next' directory doesn't exist, signaling that
 		# a new backup set has been submitted. Exit otherwise.
 		if os.path.exists(self.next_dir):
@@ -108,6 +107,8 @@ class Backup(object):
 		# process the finished backup set
 		if os.path.exists(self.finished_dir):
 			self.process_finished()
+
+		# set up 'next' directory:
 
 		# find the backup level
 		level = self.next_backup_level(self._dest_dir)
@@ -122,7 +123,7 @@ class Backup(object):
 		# change permissions so the archive user can write into it.
 		next_tmp = self.next_dir + '.tmp'
 		os.mkdir(next_tmp)
-		os.chown(next_tmp, arch_uid, arch_gid)
+		os.chown(next_tmp, self._arch_uid, self._arch_gid)
 
 		# hardlink needed duplicity files from dest to next_tmp
 		files = itertools.chain.from_iterable(
@@ -140,6 +141,7 @@ class Backup(object):
 	def __init__(self, **kwargs):
 		self.backup_root = os.path.realpath(kwargs['backup_root'])
 		self.archive_user = kwargs['archive_user']
+		self._arch_uid, self._arch_gid = pwd.getpwnam(self.archive_user)[2:4]
 
 		self.backup_set_base = os.path.join(self.backup_root,  'backups')
 		self.incoming_dir    = os.path.join(self.backup_root,  'incoming')
@@ -154,14 +156,12 @@ if __name__ == "__main__":
 	parser = argparse.ArgumentParser(description='Multi-timescale backup driver')
 	parser.add_argument('backup_root', type=str, help='Backup root directory (where to back up)')
 
+	parser.add_argument('--init', action='store_true', help='Initialize backup root directory')
+
 	parser.add_argument('--force-time', dest='now', default=str(datetime.datetime.today()), metavar='T', help='Force the current time to be T. Must be formatted as "YYYY-MM-DD [HH-MM-SS[.SS]]"')
 	parser.add_argument('--archive-user', default='archive', metavar='USERNAME', help='Username of the user that writes backups to .../incoming/next directory.')
 
 	args = parser.parse_args()
-
-	if not os.path.isdir(args.backup_root):
-		print "'%s' must exist and be a directory." % args.backup_root
-		exit(-1)
 
 	# Parse the time string
 	try:
@@ -171,5 +171,15 @@ if __name__ == "__main__":
 			args.now = datetime.datetime.strptime(args.now, '%Y-%m-%d %H:%M:%S')
 		except ValueError:
 			args.now = datetime.datetime.strptime(args.now, '%Y-%m-%d')
+
+	if args.init:
+		if os.path.isdir(args.backup_root):
+			print "'%s' must not exist when called with --init" % args.backup_root
+			exit(-1)
+		Backup(**vars(args)).init_backup_dir()
+
+	if not os.path.isdir(args.backup_root):
+		print "'%s' must exist and be a directory. Use %s --init to initialize it." % (args.backup_root, sys.argv[0])
+		exit(-1)
 
 	Backup(**vars(args)).run()
