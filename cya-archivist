@@ -33,7 +33,9 @@ class Backup(object):
 		print n, current, leaf
 
 		# find files to hardlink
-		files = list(itertools.chain.from_iterable(glob.glob(os.path.join(self.finished_dir, pat)) for pat in ['*.difftar.gz', '*.sigtar.gz', '*.manifest']))
+		duplicity_files  = ['*.difftar.gz',  '*.sigtar.gz',  '*.manifest']
+		duplicity_files += ['*.difftar.gpg', '*.sigtar.gpg', '*.manifest.gpg']
+		files = list(itertools.chain.from_iterable(glob.glob(os.path.join(self.finished_dir, pat)) for pat in duplicity_files))
 		files = zip(files, [ os.path.basename(fn) for fn in files ])
 
 		# hardlink to each level
@@ -53,8 +55,10 @@ class Backup(object):
 					assert os.path.samefile(fn_from, fn_to)
 				else:
 					os.link(fn_from, fn_to)
+
+				# Make sure they're owned by us, and they're read-only
 				os.chown(fn_to, uid, gid)
-				os.chmod(fn_to, stat.S_IRUSR | stat.S_IWUSR)
+				os.chmod(fn_to, stat.S_IRUSR | stat.S_IRGRP | stat.S_IROTH)
 
 			# next leaf
 			leaf = os.path.dirname(leaf)
@@ -71,6 +75,8 @@ class Backup(object):
 			return False
 
 		for fn in glob.iglob(os.path.join(path, '*.manifest')):
+			return True
+		for fn in glob.iglob(os.path.join(path, '*.manifest.gpg')):
 			return True
 
 		return False
@@ -112,20 +118,21 @@ class Backup(object):
 		fp.write(os.path.relpath(self._dest_dir, self.backup_set_base) + '\n')
 		fp.close()
 
-		# change permissions so the archive user can write into the directory
-		# also make sure the archive user can write into incoming (so they can 'mv next finished')
+		# create the new 'next' dir.
+		# change permissions so the archive user can write into it.
 		next_tmp = self.next_dir + '.tmp'
 		os.mkdir(next_tmp)
 		os.chown(next_tmp, arch_uid, arch_gid)
 
 		# hardlink needed duplicity files from dest to next_tmp
-		files = itertools.chain.from_iterable(glob.glob(os.path.join(level, 'files', pat)) for pat in ['*.sigtar.gz', '*.manifest'])
+		files = itertools.chain.from_iterable(
+			glob.glob(os.path.join(level, 'files', pat)) for pat in
+				['*.sigtar.gz', '*.manifest', '*.sigtar.gpg', '*.manifest.gpg']
+			)
 		for fn_from in files:
 			fn_to = os.path.join(next_tmp, os.path.basename(fn_from))
 			#print 'LINK:', fn_from, fn_to
 			os.link(fn_from, fn_to)
-			os.chmod(fn_to, stat.S_IRUSR | stat.S_IWUSR | stat.S_IRGRP)
-			os.chown(fn_to, -1, arch_gid)
 
 		# move next_tmp to next
 		os.rename(next_tmp, self.next_dir)
@@ -134,11 +141,11 @@ class Backup(object):
 		self.backup_root = os.path.realpath(kwargs['backup_root'])
 		self.archive_user = kwargs['archive_user']
 
-		self.backup_set_base = os.path.join(self.backup_root, 'backups')
-		self.incoming_dir    = os.path.join(self.backup_root, 'incoming')
+		self.backup_set_base = os.path.join(self.backup_root,  'backups')
+		self.incoming_dir    = os.path.join(self.backup_root,  'incoming')
 		self.next_dir        = os.path.join(self.incoming_dir, 'next')
 		self.finished_dir    = os.path.join(self.incoming_dir, 'finished')
-		self.info_fn         = os.path.join(self.backup_root, 'next_info')
+		self.info_fn         = os.path.join(self.backup_root,  'next_info')
 
 		self._now = kwargs['now']
 		self._dest_dir = os.path.join(self.backup_set_base, self.date2dir(self._now))
