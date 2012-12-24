@@ -4,11 +4,14 @@
 #
 # Snapshots an LVM volume befor backing up the requested directory.
 #
+# If /boot is a separate partition, and dir_to_back_up is /, rebinds
+# /boot to /.
+#
 
 set -e
 
 # snapshot mount point
-S="/.snap"
+S=${SNAPSHOT_DIR-/.snap}
 
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 
@@ -24,25 +27,26 @@ while read line; do
 	fi
 done < <(mount | awk '{print $1, $3}')
 
-test -z "$DEV" && { echo "The directory being backed up ($1) must be a root of an LVM volume."; exit -1; }
+test -z "$DEV" && { echo "The directory being backed up ($1) must be a root of an LVM volume." 1>&2; exit -1; }
 
 # Find the volume group
 VG=$(lvs /dev/vg_dev/lv_root -o vg_name --noheadings | awk '{print $1}')
 
-echo Snapshot device: lv=$DEV vg=$VG /boot=$BOOT
+##echo Snapshot device: lv=$DEV vg=$VG /boot=$BOOT
 
 # Create and mout an LVM snapshot
-lvcreate -s -l 100%FREE --name bkp_snap "$DEV"
-mkdir -p $S
+lvcreate -s -l 100%FREE --name bkp_snap "$DEV" > /dev/null
+mkdir $S
 mount /dev/$VG/bkp_snap $S -o rw,noatime
 if [[ $BOOT == "yes" ]]; then
 	mount --bind /boot $S/boot
-	echo "Bound /boot to /boot in snapshot"
+	##echo "Bound /boot to /boot in snapshot"
 	UM="umount $S/boot &&"
 fi
 
-trap "$UM umount $S && lvremove -f /dev/$VG/bkp_snap" EXIT
+trap "$UM umount $S && lvremove -f /dev/$VG/bkp_snap >/dev/null && rmdir $S" EXIT
 
+# Store LVM partition information to .dupext
 mkdir -p $S/.dupext
 "$DIR"/scripts/get-partition-data > $S/.dupext/partition-info.txt
 

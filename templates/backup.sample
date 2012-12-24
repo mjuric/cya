@@ -1,0 +1,22 @@
+#!/bin/bash
+
+# What and how to back up
+SOURCEDIR=/
+BACKUP_ENCRYPTION_KEY="XXXXXXXXX"
+duplicity()
+{
+	duplicity-ex-snap "$@" --exclude /.snap/tmp/\* --exclude /.snap/root/.cache/duplicity
+}
+
+# Where to back up to
+DESTHOST=archive@moya.dev.lsstcorp.org
+DESTDIR=dev.lsstcorp.org
+SSHKEY="/etc/cya/keys/id_rsa"
+
+###############################################
+# don't touch anything below this line,      ##
+# unless you *really* know what you're doing ##
+###############################################
+
+. /opt/cya/lib/backup.sh
+backup
