@@ -1,4 +1,0 @@
-#!/bin/bash
-
-/opt/cya/cya-archivist ~archive/dev.lsstcorp.org
-/opt/cya/cya-archivist ~archive/moya.dev.lsstcorp.org

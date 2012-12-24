@@ -1,0 +1,2 @@
+Use ssh-keygen to generate id_rsa/id_rsa.pub pair that will be used to
+upload the backup to the archive host.
