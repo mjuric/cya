@@ -4,10 +4,10 @@
 # variants, or a different backup program alltogether.
 #
 
-CYALIBDIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+CYA_LIB_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 
-type -t duplicity-ex-snap >/dev/null || duplicity-ex-snap() { "$CYALIBDIR/duplicity/duplicity-ex-snap" "$@"; }
-type -t duplicity-ex      >/dev/null || duplicity-ex()      { "$CYALIBDIR/duplicity/duplicity-ex" "$@"; }
+type -t duplicity-ex-snap >/dev/null || duplicity-ex-snap() { "$CYA_LIB_DIR/duplicity-ex-snap" "$@"; }
+type -t duplicity-ex      >/dev/null || duplicity-ex()      { "$CYA_LIB_DIR/duplicity-ex" "$@"; }
 
 backup()
 {

@@ -48,7 +48,7 @@ trap "$UM umount $S && lvremove -f /dev/$VG/bkp_snap >/dev/null && rmdir $S" EXI
 
 # Store LVM partition information to .dupext
 mkdir -p $S/.dupext
-"$DIR"/scripts/get-partition-data > $S/.dupext/partition-info.txt
+"$DIR"/get-partition-data > $S/.dupext/partition-info.txt
 
 shift;
 "$DIR"/duplicity-ex $S "$@"

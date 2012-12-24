@@ -24,7 +24,7 @@ if __name__ == "__main__":
 
 	# copy the restore script
 	for fn in ['restore-hard-links', 'restore-acl', 'restore-attr']:
-		path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'scripts', fn)
+		path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'restore-scripts', fn)
 		shutil.copy2(path, dupext_dir)
 
 	# construct 'find' exclusions based on --exclude directives. This should go first in find commands.
