@@ -1,11 +1,140 @@
-cya -- a multi-timescale backup organizer
-=========================================
+cya -- a multi-level backup system for duplicity
+================================================
 
 Mario Juric <mjuric@lsst.org>
 
-cya (pronnounced see-ya) is a driver for the Duplicity backup system that
-enables simultaneously making incremental Duplicity backups on varying
-time-scales (decade, year, month, week), while being very space efficient.
+cya (pronnounced see-ya) is a driver for the Duplicity backup tool that
+enables multi-level incremental Duplicity backups on varying time-scales
+(decade, year, month, week), while being secure and space efficient.
+
+
+Unattended automated backup
+===========================
+
+cya is designed to make backing up multiple client hosts to a single archive
+server secure and (relatively) easy. It needs an account on the archive
+server (named 'archive' by default) where the backups will be uploaded from
+the clients being backed up. All communication is done via ssh.
+
+cya also enables multi-level backups with duplicity (e.g., yearly, monthly,
+weekly, daily, etc.).  This is done by clever use of hard links and a
+hierarhical directory structure.
+
+
+Clients periodically create and upload backups to an "incoming" directory at
+the archive server. The archive server periodically collects these, placing
+them in apropriate directories in the multi-level backup hierarchy.
+
+In more detail, on the archive server:
+
+	1) For each client that is backed up, cya-collect is called daily
+	   via cron.
+
+	2) It checks if $ROOT/incoming/finished directory exists. If yes,
+	   that means a new backup has been uploaded. If no, it exits.
+
+	3) If 'finished' exists, cya-collect uses the information from
+	   $ROOT/next_info to hardlink the backup files to apropriate backup
+	   sets in $ROOT/backups.  Once done, it removes the 'finished'
+	   directory, and creates $ROOT/incomin/next.  It hardlinks the
+	   apropriate backup set files (based on current time) into this
+	   directory.  It stores which backup set has been hardlinked to
+	   $ROOT/next_info.
+
+On the client:
+
+	1) /etc/cya/backup script is run daily via cron. It checks if
+	   $ROOT/incoming/next exists on the archive server. If not, it
+	   exits, as this means that cya-collect hasn't ran yet and moved a
+	   previously created backup to its right place.
+
+	2) Otherwise, it runs duplicity, uploading the result to
+	   $ROOT/incoming/next. How duplicity is run can be customized by
+	   creating a shell function named 'duplicity' in /etc/cya/backup
+
+	3) Once the backup has finished, $ROOT/incoming/next is moved to
+	   $ROOT/incoming/finished. This signals cya-collect that a new
+	   backup is ready.
+
+Cookbook: Setting up cya on the server and clients
+==================================================
+
+- preparing the archive server:
+	* install cya in /opt/cya
+	* install duplicity 0.6.20 or higher
+
+	* create a user named 'archive'
+
+	* copy templates/collect.sample to /etc/cya/collect
+
+	* add /etc/cya/collect to crontab
+
+- preparing a client to be backed up:
+	* install cya to /opt/cya
+	* install duplicity 0.6.20 or higher
+
+	* create /etc/cya directory and chown it to 700
+	* copy templates/backup.sample to /etc/cya/backup.
+	* set BACKUP_ENCRYPTION_KEY to a password unique to this client.
+	  This password will be used to encrypt the backup set, and should
+	  not be shared with anyone (including the archive server!). Keep it
+	  in a safe place, though -- you will need it to restore the system
+	  from backups.
+	  Tip: A good way to generate a hard-to-guess password is by running
+	       `openssl rand -base64 32`
+	* create ssh keys in /etc/cya/keys. Add the public key to the
+	  archive's host 'archive' user
+	* add the archive server's host key ~root/.ssh/known_hosts, if it
+	  isn't there already. Tip: just running 'ssh archive.server.addr'
+	  and answering 'yes' when prompted should do it.
+
+	* add /etc/cya/backup to crontab. For optimal performance, have it
+	  run ~10-15 minutes after cya-collect runs on the server.
+
+Security model
+==============
+
+Definitions:
+
+* archive: the host which holds the backups
+* client: a host being backed up
+* $ROOT: base directory of backup sets on archive
+* Committed backup files: files residing in $ROOT/backups
+* Uncommited backup files: files residing in $ROOT/incoming/finished
+
+
+Design summary:
+
+Target host attempts to back itself up daily to archive:$ROOT/incoming/next
+directory, if that directory exists. When it succeeds, it renames that
+directory to 'finished'.
+
+The archive host periodically checks for existence of
+archive:$ROOT/incoming/finished. If it exists, it
+
+
+Design consequences:
+
+* If archive@archive is breached, no committed backup files can be accessed.
+  Uncommitted backup files can be accessed, read, deleted, but not decrypted.
+
+* If root@archive is breached all backup files can be accessed, read,
+  deleted, but not decrypted.
+
+* If root@client is breached, no committed backups on the archive can be
+  accessed.  Uncommitted backup files can be accessed, read, deleted, and
+  decrypted.
+
+* If both root@archive and root@client are breached, the backups can be
+  read, deleted and decrypted (full compromise).
+
+
+Multi-level backups with Duplicity
+==================================
+
+cya (pronnounced see-ya) is a driver for the Duplicity backup tool that
+enables multi-level incremental Duplicity backups on varying time-scales
+(decade, year, month, week), while being secure and space efficient.
 
 For example, after running cya daily for 10 years and one day, you'd have:
 
@@ -42,7 +171,7 @@ Assuming the first backup was made on Jan 1st 2012, after the backup on Dec
 	 ->2021.Dec.wk4.day1->...->2021.Dec.wk4.day6
 
 The maximum length of the most frequent (daily) backup set is the sum of the
-maximum lenghts of the longer timescale ones (7+4 or 5+12+10=33 or 34 in a
+maximum lenghts of the longer timescale ones (7+(4 or 5)+12+10=33 or 34 in a
 decade).
 
 cya achieves this by organizing duplicity backups in a directory tree, where
@@ -86,9 +215,10 @@ Right now, cya won't do it for you (it has to be done manually).
 Features to be documented
 =========================
 
-These are all in the code (and used in practice), but so far undocumented
-beyond the actual code:
+These are all in the code (duplicity-ex and duplicity-ex-snap utilities in
+lib/), but so far undocumented beyond the actual code:
 
+These do:
 * extending duplicity to efficiently store hardlinks
 * extending duplicity to store ACLs and xattrs
 * self-consistent backups using LVM snapshots

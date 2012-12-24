@@ -21,6 +21,8 @@ backup()
 		# save the users from themselves
 		GOPERMS=$(stat -c'%A' "$0" | cut -b 5-10)
 		[[ $GOPERMS != "------" ]] && { echo "Permissions to $0 incorrect (run 'chmod go-rwx $0')"; exit -1; }
+		GOPERMS=$(stat -c'%A' $(dirname "$0") | cut -b 5-10)
+		[[ $GOPERMS != "------" ]] && { echo "Permissions to $0 incorrect (run 'chmod go-rwx $0')"; exit -1; }
 		GOPERMS=$(stat -c'%A' "$SSHKEY" | cut -b 5-10)
 		[[ $GOPERMS != "------" ]] && { echo "Permissions to $0 incorrect (run 'chmod go-rwx $0')"; exit -1; }
 
