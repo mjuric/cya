@@ -9,6 +9,6 @@
 (
 	flock 200
 
-	find ~archive/* -maxdepth 0 -type d -exec /opt/cya/cya-collect "{}" \;
+	find ~archive/* -maxdepth 0 -type d -exec /opt/cya/bin/cya-collect "{}" \;
 
 ) 200>/var/run/cya-run

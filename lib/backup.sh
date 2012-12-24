@@ -4,8 +4,10 @@
 # variants, or a different backup program alltogether.
 #
 
-type -t duplicity-ex-snap >/dev/null || duplicity-ex-snap() { /opt/cya/duplicity-ex-snap "$@"; }
-type -t duplicity-ex      >/dev/null || duplicity-ex()      { /opt/cya/duplicity-ex "$@"; }
+CYALIBDIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+
+type -t duplicity-ex-snap >/dev/null || duplicity-ex-snap() { "$CYALIBDIR/duplicity/duplicity-ex-snap" "$@"; }
+type -t duplicity-ex      >/dev/null || duplicity-ex()      { "$CYALIBDIR/duplicity/duplicity-ex" "$@"; }
 
 backup()
 {
