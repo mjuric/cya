@@ -75,21 +75,36 @@ Cookbook: Setting up cya on the server and clients
 
 	* create /etc/cya directory and chown it to 700
 	* copy templates/backup.sample to /etc/cya/backup.
+	* set the DESTHOST, DESTDIR, and SOURCEDIR variables. DESTHOST is the
+	  address of the archive server to be used by SSH to log into it.
+	  DESTDIR is the subdirectory within ~archive, where the backup sets
+	  will be stored (by convention, this is usually the fully qualified
+	  domain name of the client). SOURCEDIR is the directory on the
+	  client you want to back up (usually '/').
 	* set BACKUP_ENCRYPTION_KEY to a password unique to this client.
 	  This password will be used to encrypt the backup set, and should
 	  not be shared with anyone (including the archive server!). Keep it
-	  in a safe place, though -- you will need it to restore the system
-	  from backups.
+	  in a safe place -- you will need it to restore the system from
+	  backups.
 	  Tip: A good way to generate a hard-to-guess password is by running
 	       `openssl rand -base64 32`
-	* create ssh keys in /etc/cya/keys. Add the public key to the
-	  archive's host 'archive' user
+	* create ssh keys in /etc/cya/keys (using ssh-keygen). Add the
+	  public key to ~archive/.ssh/authorized_keys on the archive server.
 	* add the archive server's host key ~root/.ssh/known_hosts, if it
-	  isn't there already. Tip: just running 'ssh archive.server.addr'
-	  and answering 'yes' when prompted should do it.
+	  isn't there already.
+	  Tip: just running 'ssh archive.server.addr' and answering 'yes'
+	  when prompted should do it.
 
-	* add /etc/cya/backup to crontab. For optimal performance, have it
-	  run ~10-15 minutes after cya-collect runs on the server.
+	* As root, run 'cya-collect --init ~archive/$DESTDIR' on the archive
+	  server to initialize the backup set directory structure.  DESTDIR
+	  must be the same as the one you set in /etc/cya/backup file on the
+	  client.
+
+	* add /etc/cya/backup to crontab on the client. For optimal
+	  performance, have it run ~10-15 minutes after cya-collect runs on
+	  the server.
+
+TODO: This could all be scripted/automated.
 
 Security model
 ==============
