@@ -1,2 +1,0 @@
-Use ssh-keygen to generate id_rsa/id_rsa.pub pair that will be used to log
-on to hosts to be backed up, and the archive account on the archive server.

@@ -3,77 +3,100 @@ Unattended automated backup
 
 cya is designed to make backing up multiple hosts to a single archive server
 secure and (relatively) easy.  It needs one account on the archive server
-(named 'archive') and one on the server being backed up (named 'bkp').
+(named 'archive'), where the backups will be uploaded from the backup hosts
+('targets').
 
-A cya-driven unattended backup runs as follows:
+A cya-archiver managed unattended backups run as follows:
 
-	1) cya is activated daily by cron on the archive server
+On the archive server:
 
-	2) it computes the subdirectory of the backup set based on time of
-	   backup (e.g., 2000/2010/2012/2012-12/2012-12-02 for a backup
-	   taken on 2012-12-04),
+	1) cya-archiver is called daily by cron on the archive server, with
+	   one parameter -- $ROOT -- the root of the backup set directory.
 
-	3) it invokes duplicity on the target host (the host to be backed
-	   up) giving it the backup set directory computed in #2. duplicity
-	   builds an incremental backup, and uploads the increments to 
-	   that directory (using scp://).
+	2) it checks if $ROOT/incoming/finished directory exists. If yes,
+	   that means a new backup has been uploaded.
 
-	4) once a backup is done, cya chmods it to root.root to ensure it
-	   can't be deleted or changed any more.
+	3)  If so, it uses the information from $ROOT/next_info to hardlink
+	   the backup files to apropriate backup sets in $ROOT/backups. 
+	   Once done, it removes the 'finished' directory, and creates
+	   $ROOT/incomin/next, into which it hardlinks the apropriate backup
+	   set (based on current time).  It stores which backup set has been
+	   hardlinked to $ROOT/next_info.
 
+On the target host:
+
+	1) /etc/opt/backup script is run daily by cron. It checks if
+	   $ROOT/incoming/next exists on the archive server. If not, it
+	   exists (this means that cya-archiver hasn't ran yet and moved the
+	   old backup to its right place).
+
+	2) Otherwise, it runs duplicity, uploading the result to
+	   $ROOT/incoming/next
+
+	3) Once backup has finished, $ROOT/incoming/next is moved to
+	   $ROOT/incoming/finished, signaling to cya-archiver that a new
+	   backup is ready.
 
 Cookbook: Setting up cya on 'archive' and 'target' hosts
 ========================================================
 
+NOTE: When adding any of these to be executed by cron, make sure to wrap it
+in something that prevents the command being executed more than once at a
+time (e.g., a flock call: 'flock /var/run/cya-backup /etc/cya/backup').
+
 - on the archive host:
 	* install cya in /opt/cya
-	* create /etc/cya based on archive/etc_cya
-	* create ssh key for access to target hosts (and back) in /etc/cya/keys
+	* install duplicity 0.6.20 or higher
 
 	* create user named 'archive'
-	* add the public key from /etc/cya/keys to archive's authorized_keys
+	* add public keys of target hosts to archive's authorized_keys
 
-	* edit /etc/cya/run backup driver script to point it to right target hosts
+	* create /etc/cya/run based on archive/etc_cya
 	* add to /etc/cya/run to crontab, to be run daily
 
 - on each target host
 	* install cya to /opt/cya
 
-	* create user bkp
-	* add archive host's key to bkp's authorized_keys
-	* add sudoers entry to /etc/sudoers.d/bkp from target/etc_sudoers.d
-
 	* create /etc/cya based on target/etc_cya
-	* edit /etc/cya/backup script to specify how and what to back up
+	* customize /etc/cya/backup script for your backup
+	* create ssh keys in /etc/cya/keys and add the public key to the
+	  archive's host 'archive' user
 
-Security notes:
-===============
+	* add /etc/cya/backup to crontab
 
-cya invokes duplicity on the target by logging in invocation script verifies
-that the archive server to which duplicity is being asked to upload the
-increments is the correct one, and refuses to backup if it isn't.  This way,
-if the key to bkp@target is ever compromised, the attacker is unable to get
-to data not readable to user bkp or to get root shell.
+Security model
+==============
 
-Similarly, when duplicity uploads the backup set to the archive server, it
-uploads it to username archive@archive.  Immediately after upload, the cya
-script on the archive server chowns the newly created files (to root). 
-Therefore, if the user archive is ever compromised, the backup sets can't be
-deleted.
+Definitions:
 
-Finally, note that the SSH keys to archive@archive are *not* stored on the
-target host.  When cya initiates a backup, it uses ssh-agent to forward
-authentication requests back to the archive host.  This makes key to archive
-harder to compromise in case of a breach of the target server.
+* archive: the host which holds the backups
+* target: a host being backed up
+* $ROOT: base directory of backup sets on archive
+* Committed backup files: files residing in $ROOT/backups
+* Uncommited backup files: files residing in $ROOT/incoming/finished
 
-TODO:
-	* make duplicity non-signature tarballs unreadable to anyone but
-	  root. This would ensure that if archive@archive account is ever
-	  compromised the attacker can't get to the contents of the backups.
 
-	* make the backups encrypted, keeping the encryption key only on the
-	  target host (and a copy somewhere in a safe). This would make the
-	  backups completely unreadable on archive, so even in case of a
-	  full compromise of the archive server, the attacker won't be able
-	  to read the contents of the backups.
+Design summary:
 
+Target host attempts to back itself up daily to archive:$ROOT/incoming/next
+directory, if that directory exists. When it succeeds, it renames that
+directory to 'finished'.
+
+The archive host periodically checks for existence of
+archive:$ROOT/incoming/finished. If it exists, it
+
+
+Design consequences:
+
+* If archive@archive is breached, no committed backup files can be accessed.
+  Uncommitted backup files can be accessed, read, deleted, but not decrypted.
+
+* If root@archive is breached all backup files can be accessed, read,
+  deleted, but not decrypted.
+
+* If root@target is breached, no committed backups on the archive can be
+  accessed.  Uncommitted backup files can be accessed, read, deleted, and
+  decrypted.
+
+* If both root@archive and root@target are breached, the backups can be
+  read, deleted and decrypted (full compromise).
