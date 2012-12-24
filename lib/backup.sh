@@ -18,13 +18,15 @@ backup()
 		flock --nonblock 200 || { echo "Backup already in progress. Exiting."; exit 1; }
 
 
-		# save the users from themselves
+		# save the users from themselves; check that /etc/cya, /etc/cya/backup and the private SSH keys are
+		# not group or world accessible
 		GOPERMS=$(stat -c'%A' "$0" | cut -b 5-10)
 		[[ $GOPERMS != "------" ]] && { echo "Permissions to $0 incorrect (run 'chmod go-rwx $0')"; exit -1; }
-		GOPERMS=$(stat -c'%A' $(dirname "$0") | cut -b 5-10)
-		[[ $GOPERMS != "------" ]] && { echo "Permissions to $0 incorrect (run 'chmod go-rwx $0')"; exit -1; }
+		ETC_CYA_DIR=$(dirname "$0")
+		GOPERMS=$(stat -c'%A' "$ETC_CYA_DIR" | cut -b 5-10)
+		[[ $GOPERMS != "------" ]] && { echo "Permissions to $ETC_CYA_DIR incorrect (run 'chmod go-rwx $ETC_CYA_DIR')"; exit -1; }
 		GOPERMS=$(stat -c'%A' "$SSHKEY" | cut -b 5-10)
-		[[ $GOPERMS != "------" ]] && { echo "Permissions to $0 incorrect (run 'chmod go-rwx $0')"; exit -1; }
+		[[ $GOPERMS != "------" ]] && { echo "Permissions to $SSHKEY incorrect (run 'chmod go-rwx $SSHKEY')"; exit -1; }
 
 		# Test if it's OK to start
 		START=$(ssh -i "$SSHKEY" "$DESTHOST" "test -d $DESTDIR/incoming/next && echo Y")
