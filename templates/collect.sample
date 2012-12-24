@@ -2,13 +2,13 @@
 #
 # Copy to /etc/cya/, modify as needed, and run daily as root.
 #
-# It will cya-archivist for every subdirectory in a given directory (by
+# It will cya-collect for every subdirectory in a given directory (by
 # default, ~archive).
 #
 
 (
 	flock 200
 
-	find ~archive/* -maxdepth 0 -type d -exec /opt/cya/cya-archivist "{}" \;
+	find ~archive/* -maxdepth 0 -type d -exec /opt/cya/cya-collect "{}" \;
 
 ) 200>/var/run/cya-run

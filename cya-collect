@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 #
-# cya-archivist ~archive/trac.lsstcorp.org
+# cya-collect ~archive/trac.lsstcorp.org
 #
 
 import time, os, os.path, glob, datetime, itertools, argparse, stat, pwd, sys
