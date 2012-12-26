@@ -3,12 +3,9 @@
 # What and how to back up
 SOURCEDIR=/
 BACKUP_ENCRYPTION_KEY="XXXXXXXXX"
-EXCLUDE=(/tmp /proc /selinux /sys /remote)
 duplicity()
 {
-	AA=()
-	for DIR in "${EXCLUDE[@]}"; do AA+=("--exclude" "$DIR"); done
-	duplicity-ex "$@" "${AA[@]}"
+	duplicity-ex-snap "$@" --exclude /.snap/tmp/\* --exclude /.snap/root/.cache/duplicity
 }
 
 # Where to back up to
