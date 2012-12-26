@@ -7,7 +7,7 @@
 # Stores the extra metadata in .dupext directory in root of the backup.
 #
 
-import os, atexit, collections, itertools, os, os.path, argparse, shutil, pipes, shlex, subprocess, sys
+import os, atexit, itertools, os, os.path, argparse, shutil, pipes, shlex, subprocess, sys
 
 if __name__ == "__main__":
 	parser = argparse.ArgumentParser(description='Duplicity driver that stores ACLs, xattrs and apropriately handles hardlinks')
@@ -33,7 +33,7 @@ if __name__ == "__main__":
 	exclude_pat += [ '!', '-path', args.source_directory, '-a' ]	# Otherwise, an entry for the source_directory itself will be returned
 
 	# Find all hardlinks
-	hardlinks = collections.defaultdict(list)
+	hardlinks = dict()
 	cmd = ["find", args.source_directory] + exclude_pat + shlex.split("! -type d -links +1 -printf '%i %n %P\\0'")
 #	print " ".join((pipes.quote(s) for s in cmd))
 #	exit()
@@ -45,6 +45,8 @@ if __name__ == "__main__":
 		if not line:
 			continue
 		(inode, num, fn) = line.split(' ', 2)
+		if inode not in hardlinks:
+			hardlinks[inode] = []
 		hardlinks[inode].append(fn)
 
 	# Write out the list of files with hard links and
@@ -65,7 +67,7 @@ if __name__ == "__main__":
 	# ACLs, excluding excluded directories, sockets and links
 	cmd = ["find", args.source_directory] + exclude_pat + ['!', '-type', 's', '-a', '!', '-type', 'l', '-a'] + ['-printf', "%P\\0"]
 	p1 = subprocess.Popen(cmd, stdout=subprocess.PIPE)
-	p2 = subprocess.Popen(shlex.split("xargs -0 getfacl -n"), stdin=p1.stdout, stdout=subprocess.PIPE, cwd=args.source_directory)
+	p2 = subprocess.Popen(shlex.split("xargs -0 getfacl --numeric"), stdin=p1.stdout, stdout=subprocess.PIPE, cwd=args.source_directory)
 	p1.stdout.close()  # Allow p1 to receive a SIGPIPE if p2 exits.
 	fp = open(os.path.join(dupext_dir, "acl.txt"), "w")
 	for line in p2.stdout:
@@ -86,4 +88,7 @@ if __name__ == "__main__":
 	cmd = ['duplicity', '--null-separator', '--exclude-filelist', exclude_filelist_fn] + sys.argv[1:]
 #	print cmd
 #	exit()
-	subprocess.check_call(cmd)
+	p = subprocess.Popen(cmd)
+	p.communicate()
+	if p.returncode:
+		raise subprocess.CalledProcessError(p.returncode, " ".join((pipes.quote(s) for s in cmd)))
