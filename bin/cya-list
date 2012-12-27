@@ -1,0 +1,27 @@
+#!/bin/bash
+#
+# List available backups
+#
+
+[[ $# -lt 1 ]] && { echo "Usage: $(basename $0) <backup_base_dir> [backup_base_dir...]"; exit -1; }
+
+list_backups()
+{
+	while read LINE; do
+	        T=${LINE%Z.manifest.gpg}
+	        P=$(dirname "$T")
+	        echo "  ${T: -15:4}-${T: -11:2}-${T: -9:2} ${T: -6:2}:${T: -4:2}:${T: -2:2} GMT [in $P]"
+	done
+}
+
+for BASE in "$@"; do
+	[[ -d "$BASE/backups" ]] || { echo "$BASE is not a CYA backup set. Skipping."; continue; }
+	echo "$BASE:"
+	find "$BASE/backups" -name "*.manifest.gpg" -printf "%f %p\n" | sort -k 1,1 -u | awk '{print $2}' | list_backups
+	find "$BASE/incoming" -! -user 'root' -name "*.manifest.gpg" -printf "%p\n" | list_backups
+
+	NEXT="$BASE/incoming/next"
+	(ls "$NEXT" 2>/dev/null | grep -q "\.difftar\.gpg$") && echo "  Backup in progress [$(du -kh $NEXT | cut -f1) in $NEXT]"
+
+	echo
+done
