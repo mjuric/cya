@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/bin/bash
 # Usage: $0 <directory_to_backup> <duplicity backup arguments>
 #
 # Same as duplicity, but records ACLs, and xattrs, and is intelligent about not
@@ -7,88 +7,79 @@
 # Stores the extra metadata in .dupext directory in root of the backup.
 #
 
-import os, atexit, itertools, os, os.path, argparse, shutil, pipes, shlex, subprocess, sys
+set -e
 
-if __name__ == "__main__":
-	parser = argparse.ArgumentParser(description='Duplicity driver that stores ACLs, xattrs and apropriately handles hardlinks')
-	parser.add_argument('source_directory', type=str, help='Directory to back up')
-	parser.add_argument('--exclude', type=str, default=[], action='append', help='These directives must come before any duplicity_args' )
+[[ $# -le 1 ]] && { cat <<-EOF
+	Duplicity driver that records ACLs and XATTRs, and apropriately handles hardlinks
 
-	args, _ = parser.parse_known_args()
+	Usage: $(basename "$0") <source_dir> [duplicity_arguments]
+EOF
+	exit -1
+}
 
-	# Create .dupext dir, and ensure .dupext is deleted on exit
-	dupext_dir = os.path.join(args.source_directory, '.dupext')
-	atexit.register(shutil.rmtree, dupext_dir, True)
-	if not os.path.isdir(dupext_dir):
-		os.mkdir(dupext_dir)
+# Source directory must be the first argument
+SRC_DIR="$1"
 
-	# copy the restore script
-	for fn in ['restore-hard-links', 'restore-acl', 'restore-attr']:
-		path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'restore-scripts', fn)
-		shutil.copy2(path, dupext_dir)
+# Metadata will be stored in a hidden directory in $SRC_DIR, and cached in
+# $CACHE_DIR, but staged to $DUPEXT_TMP first
+DUPEXT_DIR="${SRC_DIR%/}/.dupext"
+DUPEXT_TMP="$(mktemp -d -t dupext.XXXXXXX)"
+HASH=( $(echo "$@" | md5sum) )
+CACHE_DIR="$HOME/.cache/duplicity-ex/$HASH"
 
-	# construct 'find' exclusions based on --exclude directives. This should go first in find commands.
-	exclusions = [ dupext_dir ] + args.exclude
-	exclude_pat = list(itertools.chain(*(['!', '(', '-path', pat, '-prune', ')', '-a'] for pat in exclusions)))
-	exclude_pat += [ '!', '-path', args.source_directory, '-a' ]	# Otherwise, an entry for the source_directory itself will be returned
+atexit() { for DIR in "$DUPEXT_DIR" "$DUPEXT_TMP"; do [[ -f "$DIR/.dupext" ]] && rm -rf "$DIR"; done; }
+trap atexit EXIT
 
-	# Find all hardlinks
-	hardlinks = dict()
-	cmd = ["find", args.source_directory] + exclude_pat + shlex.split("! -type d -links +1 -printf '%i %n %P\\0'")
-#	print " ".join((pipes.quote(s) for s in cmd))
-#	exit()
-	p = subprocess.Popen(cmd, stdout=subprocess.PIPE)
-	res = p.communicate()[0]
-	if p.returncode:
-		raise subprocess.CalledProcessError(p.returncode, " ".join((pipes.quote(s) for s in cmd)))
-	for line in res.split('\0'):
-		if not line:
-			continue
-		(inode, num, fn) = line.split(' ', 2)
-		if inode not in hardlinks:
-			hardlinks[inode] = []
-		hardlinks[inode].append(fn)
+mkdir -p "$DUPEXT_DIR" && : >> $DUPEXT_DIR/.dupext
+mkdir -p "$DUPEXT_TMP" && : >> $DUPEXT_TMP/.dupext
+mkdir -p "$CACHE_DIR"
+echo "duplicity-ex: metadata directory: $DUPEXT_DIR"
+echo "duplicity-ex: metadata staging directory: $DUPEXT_TMP"
+echo "duplicity-ex: metadata cache dir: $CACHE_DIR"
 
-	# Write out the list of files with hard links and
-	# create an exclusion file for duplicity for multiply hardlinked files
-	exclude_filelist_fn = os.path.join(dupext_dir, "exclude.txtz")
-	fp1 = open(os.path.join(dupext_dir, "hardlinks.txtz"), "w")
-	fp2 = open(exclude_filelist_fn, "w")
-	for inode, fns in hardlinks.iteritems():
-		first = True
-		for fn in fns:
-			fp1.write("%s %d %s\0" % (inode, len(fns), fn))
-			if not first:
-				fp2.write("%s\0" % (os.path.join(args.source_directory, fn)))
-			first = False
-	fp1.close()
-	fp2.close()
+# Copy restore scripts to $DUPEXT_TMP
+SCRIPTS_DIR=$(dirname "${BASH_SOURCE[0]}")/restore-scripts
+for FN in 'restore-hard-links' 'restore-acl' 'restore-attr'; do
+	cp -a "$SCRIPTS_DIR/$FN" $DUPEXT_TMP
+done
 
-	# ACLs, excluding excluded directories, sockets and links
-	cmd = ["find", args.source_directory] + exclude_pat + ['!', '-type', 's', '-a', '!', '-type', 'l', '-a'] + ['-printf', "%P\\0"]
-	p1 = subprocess.Popen(cmd, stdout=subprocess.PIPE)
-	p2 = subprocess.Popen(shlex.split("xargs -0 getfacl --numeric"), stdin=p1.stdout, stdout=subprocess.PIPE, cwd=args.source_directory)
-	p1.stdout.close()  # Allow p1 to receive a SIGPIPE if p2 exits.
-	fp = open(os.path.join(dupext_dir, "acl.txt"), "w")
-	for line in p2.stdout:
-		fp.write(line)
-	fp.close()
+# Extract all excludes from the command line (--exclude EXCL, --exclude=EXCL)
+ARGS=("$@")
+EXCLUDE=( "$DUPEXT_DIR" )
+for i in ${!ARGS[*]}; do
+	ARG="${ARGS[i]}"
+	[[ $ARG == --exclude=* ]] && EXCLUDE+=("${ARG:10}")
+	[[ $ARG == --exclude ]]   && { (( i++ )); EXCLUDE+=("${ARGS[i]}"); }
+done
+echo "duplicity-ex: excluding: ${EXCLUDE[@]}"
 
-	# ACLs, excluding excluded directories and sockets
-	cmd = ["find", args.source_directory] + exclude_pat + ['!', '-type', 's', '-a'] + ['-printf', "%P\\0"]
-	p1 = subprocess.Popen(cmd, stdout=subprocess.PIPE)
-	p2 = subprocess.Popen(shlex.split("xargs -0 getfattr -h -m . -d"), stdin=p1.stdout, stdout=subprocess.PIPE, cwd=args.source_directory)
-	p1.stdout.close()  # Allow p1 to receive a SIGPIPE if p2 exits.
-	fp = open(os.path.join(dupext_dir, "attr.txt"), "w")
-	for line in p2.stdout:
-		fp.write(line)
-	fp.close()
+# construct 'find' exclusions
+FINDARGS=("-not" "-path" "$SRC_DIR")
+for E in "${EXCLUDE[@]}"; do FINDARGS+=(-not \( -path "$E" -prune \)); done
+##echo FINDARGS: "${FINDARGS[@]}"
 
-	# run duplicity
-	cmd = ['duplicity', '--null-separator', '--exclude-filelist', exclude_filelist_fn] + sys.argv[1:]
-#	print cmd
-#	exit()
-	p = subprocess.Popen(cmd)
-	p.communicate()
-	if p.returncode:
-		raise subprocess.CalledProcessError(p.returncode, " ".join((pipes.quote(s) for s in cmd)))
+
+
+# Backup only one path for each multiply linked file (exclude others)
+find "$SRC_DIR" "${FINDARGS[@]}" -not -type d -links +1 -printf '%i %n %P\0' | sort -s -n -z -k 1,1 | tee "$DUPEXT_TMP/hardlinks.txtz" |
+while read -d $'\0' LINE; do
+	ARR=($LINE)
+	[[ $ARR == $i0 ]] && { printf "%s\0" "${SRC_DIR%/}/${LINE#$ARR ${ARR[1]} }"; } || { i0="$ARR"; }
+done > "$DUPEXT_TMP/exclude.txtz"
+
+# Store acls and xattrs (the weirdness with cd-s is to make getfacl/attr output paths relative to $SRC_DIR)
+WD=$(pwd)
+find_all() { (cd "$WD" && find "$SRC_DIR" "${FINDARGS[@]}" -not -type s -not -type l -printf "%P\\0"); }
+(cd "$SRC_DIR" && find_all | xargs -0 getfacl --numeric --skip-base) > "$DUPEXT_TMP/acl.txt"
+(cd "$SRC_DIR" && find_all | xargs -0 getfattr -h -m . -d)           > "$DUPEXT_TMP/attr.txt"
+
+# Cache metadata in ~/.cache/duplicity-ex, updating only files that changed
+
+for PTH in "$DUPEXT_TMP"/*; do
+	FN=$(basename "$PTH")
+	cmp -s "$PTH" "$CACHE_DIR/$FN" || { echo "duplicity-ex: $FN changed."; cp -a "$PTH" "$CACHE_DIR"; }
+	cp -a "$CACHE_DIR/$FN" "$DUPEXT_DIR"
+done
+
+# Run duplicity
+echo duplicity --null-separator --exclude-filelist "$DUPEXT_DIR/exclude.txtz" "$@"
