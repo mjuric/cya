@@ -25,7 +25,8 @@ SRC_DIR="$1"
 DUPEXT_DIR="${SRC_DIR%/}/.dupext"
 DUPEXT_TMP="$(mktemp -d -t dupext.XXXXXXX)"
 HASH=( $(echo "$@" | md5sum) )
-CACHE_DIR="${HOME%/}/.cache/duplicity-ex/$HASH"
+CACHE_BASE="${HOME%/}/.cache/duplicity-ex"
+CACHE_DIR="$CACHE_BASE/$HASH"
 
 atexit() { for DIR in "$DUPEXT_DIR" "$DUPEXT_TMP"; do [[ -f "$DIR/.dupext" ]] && rm -rf "$DIR"; done; }
 trap atexit EXIT
@@ -33,6 +34,7 @@ trap atexit EXIT
 mkdir -p "$DUPEXT_DIR" && : >> $DUPEXT_DIR/.dupext
 mkdir -p "$DUPEXT_TMP" && : >> $DUPEXT_TMP/.dupext
 mkdir -p "$CACHE_DIR"
+chmod 700 "$CACHE_BASE"
 echo "duplicity-ex: metadata directory: $DUPEXT_DIR"
 echo "duplicity-ex: metadata staging directory: $DUPEXT_TMP"
 echo "duplicity-ex: metadata cache dir: $CACHE_DIR"

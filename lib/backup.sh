@@ -39,6 +39,11 @@ backup()
 			# Do it from a subshell so we don't release the lock
 			exec 200>&-
 
+			# Make sure cache directory isn't readable to anyone.
+			# This is really a bug in duplicity.
+			mkdir -p "$HOME/.cache/duplicity"
+			chmod 700 "$HOME/.cache/duplicity"
+
 			export PASSPHRASE="$BACKUP_ENCRYPTION_KEY"
 			duplicity \
 				"$SOURCEDIR" \
