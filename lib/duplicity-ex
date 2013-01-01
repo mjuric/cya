@@ -17,8 +17,6 @@ EOF
 	exit -1
 }
 
-HOME=${HOME-/root}
-
 # Source directory must be the first argument
 SRC_DIR="$1"
 
@@ -27,7 +25,7 @@ SRC_DIR="$1"
 DUPEXT_DIR="${SRC_DIR%/}/.dupext"
 DUPEXT_TMP="$(mktemp -d -t dupext.XXXXXXX)"
 HASH=( $(echo "$@" | md5sum) )
-CACHE_DIR="$HOME/.cache/duplicity-ex/$HASH"
+CACHE_DIR="${HOME%/}/.cache/duplicity-ex/$HASH"
 
 atexit() { for DIR in "$DUPEXT_DIR" "$DUPEXT_TMP"; do [[ -f "$DIR/.dupext" ]] && rm -rf "$DIR"; done; }
 trap atexit EXIT
