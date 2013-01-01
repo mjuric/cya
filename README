@@ -103,6 +103,10 @@ Cookbook: Setting up cya on the server and clients
 	* add /etc/cya/backup to crontab on the client. For optimal
 	  performance, have it run ~10-15 minutes after cya-collect runs on
 	  the server.
+	  WARNING: Some distros (notably, RHEL) set HOME=/ in /etc/crontab.
+	  If your distro does this, make sure you run /etc/home/backup with
+	  HOME=/root envvar set. Otherwise, cache directories will be
+	  created in /.
 
 TODO: This could all be scripted/automated.
 
