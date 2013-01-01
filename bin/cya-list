@@ -8,9 +8,13 @@
 list_backups()
 {
 	while read LINE; do
-	        T=${LINE%Z.manifest.gpg}
-	        P=$(dirname "$T")
-	        echo "  ${T: -15:4}-${T: -11:2}-${T: -9:2} ${T: -6:2}:${T: -4:2}:${T: -2:2} GMT [$(du -c --block-size 1MB $T* | tail -n1 | cut -f1 | xargs printf "% 6dM") in $P]"
+		D=$(dirname "$LINE")
+		T=$(basename "$LINE")
+	        T=${T%Z.manifest.gpg}	# Chop off suffix
+	        T=${T#duplicity-full.}	# Chop off one potential prefix
+	        T=${T#duplicity-inc.}	# Chop off the other potential prefix
+	        S=$(du -c --block-size 1MB "$D"/*$T* | tail -n1 | cut -f1 | xargs printf "% 6dM")
+	        echo "  ${T: -15:4}-${T: -11:2}-${T: -9:2} ${T: -6:2}:${T: -4:2}:${T: -2:2} GMT [$S in $D]"
 	done
 }
 
