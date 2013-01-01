@@ -3,7 +3,7 @@
 # What and how to back up
 SOURCEDIR=/
 BACKUP_ENCRYPTION_KEY="XXXXXXXXX"
-EXCLUDE=(/tmp /proc /selinux /sys /remote)
+EXCLUDE=(/tmp /proc /selinux /sys /remote /root/.cache/duplicity\*)
 duplicity()
 {
 	AA=()

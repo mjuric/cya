@@ -5,7 +5,7 @@ SOURCEDIR=/
 BACKUP_ENCRYPTION_KEY="XXXXXXXXX"
 duplicity()
 {
-	duplicity-ex-snap "$@" --exclude /.snap/tmp/\* --exclude /.snap/root/.cache/duplicity
+	duplicity-ex-snap "$@" --exclude /.snap/tmp/\* --exclude /.snap/root/.cache/duplicity\*
 }
 
 # Where to back up to
