@@ -82,4 +82,4 @@ for PTH in "$DUPEXT_TMP"/*; do
 done
 
 # Run duplicity
-echo duplicity --null-separator --exclude-filelist "$DUPEXT_DIR/exclude.txtz" "$@"
+duplicity --null-separator --exclude-filelist "$DUPEXT_DIR/exclude.txtz" "$@"
