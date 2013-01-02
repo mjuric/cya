@@ -1,75 +1,59 @@
-cya -- a multi-level backup system for duplicity
+cya -- a multi-level backup driver for Duplicity
 ================================================
 
 Mario Juric <mjuric@lsst.org>
 
-cya (pronnounced see-ya) is a driver for the Duplicity backup tool that
-enables multi-level incremental Duplicity backups on varying time-scales
-(decade, year, month, week), while being secure and space efficient.
+cya (pronnounced see-ya) is a driver for the Duplicity backup tool
+(http://duplicity.nongnu.org) that enables:
+
+* multi-level incremental backups on varying time-scales (decade, year,
+  month, week), with the ability to keep only the latest few backups on each
+  time scale.
+
+* handling of hard links, access control lists, and extended attributes. This
+  allows whole-system backups to be performed with cya.
+
+* unattended backups while maintaining security and space efficiency.
 
 
-Unattended automated backup
-===========================
+Quick Start
+===========
 
-cya is designed to make backing up multiple client hosts to a single archive
-server secure and (relatively) easy. It needs an account on the archive
-server (named 'archive' by default) where the backups will be uploaded from
-the clients being backed up. All communication is done via ssh.
+How it works
+------------
 
-cya also enables multi-level backups with duplicity (e.g., yearly, monthly,
-weekly, daily, etc.).  This is done by clever use of hard links and a
-hierarhical directory structure.
+Every day each client adds an incremental backup to a client-specific
+'incoming' directory on the archive server (typically,
+~archive/$CLIENT/incoming). The backups are usually encrypted for added
+security.
+
+The archive server then moves the new increment to its correct place in the
+multi-level hierarchy (see 'Multi-level Backups' below), and prepares the
+'incoming' directory for the next (incremental) backup.
+
+In time, at each level in the directory tree (typically,
+~archive/$CLIENT/backups) a backup chain forms, with increments taken at
+different scales.
 
 
-Clients periodically create and upload backups to an "incoming" directory at
-the archive server. The archive server periodically collects these, placing
-them in apropriate directories in the multi-level backup hierarchy.
+Setting up
+----------
 
-In more detail, on the archive server:
+Preparing the archive server:
 
-	1) For each client that is backed up, cya-collect is called daily
-	   via cron.
-
-	2) It checks if $ROOT/incoming/finished directory exists. If yes,
-	   that means a new backup has been uploaded. If no, it exits.
-
-	3) If 'finished' exists, cya-collect uses the information from
-	   $ROOT/next_info to hardlink the backup files to apropriate backup
-	   sets in $ROOT/backups.  Once done, it removes the 'finished'
-	   directory, and creates $ROOT/incomin/next.  It hardlinks the
-	   apropriate backup set files (based on current time) into this
-	   directory.  It stores which backup set has been hardlinked to
-	   $ROOT/next_info.
-
-On the client:
-
-	1) /etc/cya/backup script is run daily via cron. It checks if
-	   $ROOT/incoming/next exists on the archive server. If not, it
-	   exits, as this means that cya-collect hasn't ran yet and moved a
-	   previously created backup to its right place.
-
-	2) Otherwise, it runs duplicity, uploading the result to
-	   $ROOT/incoming/next. How duplicity is run can be customized by
-	   creating a shell function named 'duplicity' in /etc/cya/backup
-
-	3) Once the backup has finished, $ROOT/incoming/next is moved to
-	   $ROOT/incoming/finished. This signals cya-collect that a new
-	   backup is ready.
-
-Cookbook: Setting up cya on the server and clients
-==================================================
-
-- preparing the archive server:
 	* install cya in /opt/cya
 	* install duplicity 0.6.20 or higher
 
 	* create a user named 'archive'
 
-	* copy templates/collect.sample to /etc/cya/collect
+	* copy templates/collect.sample to /etc/cya/collect. Customize if
+	  necessary.
 
 	* add /etc/cya/collect to crontab
 
-- preparing a client to be backed up:
+
+Preparing a client to be backed up:
+
 	* install cya to /opt/cya
 	* install duplicity 0.6.20 or higher
 
@@ -108,92 +92,14 @@ Cookbook: Setting up cya on the server and clients
 	  HOME=/root envvar set. Otherwise, cache directories will be
 	  created in /.
 
-TODO: This could all be scripted/automated.
 
-Security model
-==============
+Multi-level backups
+===================
 
-Definitions:
-
-* archive: the host which holds the backups
-* client: a host being backed up
-* $ROOT: base directory of backup sets on archive
-* Committed backup files: files residing in $ROOT/backups
-* Uncommited backup files: files residing in $ROOT/incoming/finished
-
-
-Design summary:
-
-Target host attempts to back itself up daily to archive:$ROOT/incoming/next
-directory, if that directory exists. When it succeeds, it renames that
-directory to 'finished'.
-
-The archive host periodically checks for existence of
-archive:$ROOT/incoming/finished. If it exists, it
-
-
-Design consequences:
-
-* If archive@archive is breached, no committed backup files can be accessed.
-  Uncommitted backup files can be accessed, read, deleted, but not decrypted.
-
-* If root@archive is breached all backup files can be accessed, read,
-  deleted, but not decrypted.
-
-* If root@client is breached, no committed backups on the archive can be
-  accessed.  Uncommitted backup files can be accessed, read, deleted, and
-  decrypted.
-
-* If both root@archive and root@client are breached, the backups can be
-  read, deleted and decrypted (full compromise).
-
-
-Multi-level backups with Duplicity
-==================================
-
-cya (pronnounced see-ya) is a driver for the Duplicity backup tool that
-enables multi-level incremental Duplicity backups on varying time-scales
+cya enables multi-level incremental Duplicity backups on varying time-scales
 (decade, year, month, week), while being secure and space efficient.
 
-For example, after running cya daily for 10 years and one day, you'd have:
-
-  * one full backup
-  * ten incremental yearly backups
-  * for each year, twelve monthly backups
-  * for each month, four weekly backups
-  * for each week, seven daily backups
-
-Assuming you keep only the last two weeks, last two months, last two years,
-and last two decades of backups in each set, you'd have:
-
-  * one full backup
-  * ten yearly backups (incremental)
-  * for the last two years, twelve monthly backups (each)
-  * in the last year, for the last two months, four weekly backups (each)
-  * in the last two weeks, seven daily backups (each)
-
-Assuming the first backup was made on Jan 1st 2012, after the backup on Dec
-31st 2021, you'll have the following increment chains:
-
-  * in the yearly set:  2012(full)->2013->2014->...->2021
-  * in the monthly set:
-	2012(full)->2013->2014->...->2021.Jan->
-	 ->2021.Feb->2021.Mar->...2021.Dec
-  * in the weekly set:
-	2012(full)->2013->2014->...->2021.Jan->
-	 ->2021.Feb->2021.Mar->...2021.Dec
-	 ->2021.Dec.wk1->...->2021.Dec.wk4
-  * and in the daily set:
-	2012(full)->2013->2014->...->2021.Jan->
-	 ->2021.Feb->2021.Mar->...2021.Dec
-	 ->2021.Dec.wk1->...->2021.Dec.wk4
-	 ->2021.Dec.wk4.day1->...->2021.Dec.wk4.day6
-
-The maximum length of the most frequent (daily) backup set is the sum of the
-maximum lenghts of the longer timescale ones (7+(4 or 5)+12+10=33 or 34 in a
-decade).
-
-cya achieves this by organizing duplicity backups in a directory tree, where
+cya does this by organizing Duplicity backups in a directory tree, where
 each level in the tree corresponds to the timescale of a backup stored at
 that level. For example, a backup made on 2012-12-04 would be placed in a
 directory named:
@@ -219,17 +125,109 @@ On 2012-12-09, the destination directory will change to:
 	2000/2010/2012/2012-12/2012-12-02
 
 As it is empty, cya will look into one directory up the hierarchy to use as
-a basis for this (incremental) backup.  It will first hardlink all files
-from 2000/2010/2012/2012-12 into 2000/2010/2012/2012-12/2012-12-02, and then
-run an incremental duplicity backup.  Analogous procedure is repeated when
-the month/year/decade boundaries are crossed.
+a basis for this (incremental) backup.  It will first hardlink files from
+2000/2010/2012/2012-12 to 2000/2010/2012/2012-12/2012-12-02, and make this
+the 'incoming' directory for the next incremental backup.  The procedure is
+repeated when the month/year/decade boundaries are crossed. In time, at each
+level in the directory tree a backup chain forms, with increments taken at
+different scales.
 
-In time, each level in the directory tree builds a set of incremental
-backups taken at different scales. It's likely desirable to keep this tree
-pruned, deleting all but two newest leaf directories at every level of the
+It's likely desirable to keep this tree pruned, deleting all but two newest
+leaf directories at every level of the hierarchy. Right now, cya won't do it
+for you (it has to be done manually).
+
+
+Security model
+==============
+
+Definitions:
+
+* archive: the host which holds the backups
+* client: a host being backed up
+* $ROOT: base directory of backup sets on archive
+* Committed backup files: files residing in $ROOT/backups
+* Uncommited backup files: files residing in $ROOT/incoming/finished
+
+
+Design summary:
+
+Client host attempts to back itself up daily to archive:$ROOT/incoming/next
+directory, if that directory exists. When it succeeds, it renames that
+directory to 'finished'.
+
+The archive host periodically checks for existence of
+archive:$ROOT/incoming/finished. If it exists, it
+
+
+Design consequences:
+
+* If archive@archive is breached, no committed backup files can be accessed.
+  Uncommitted backup files can be accessed, read, deleted, but not decrypted.
+
+* If root@archive is breached all backup files can be accessed, read,
+  deleted, but not decrypted.
+
+* If root@client is breached, no committed backups on the archive can be
+  accessed.  Uncommitted backup files can be accessed, read, deleted, and
+  decrypted.
+
+* If both root@archive and root@client are breached, the backups can be
+  read, deleted and decrypted (full compromise).
+
+
+Implementation details
+======================
+
+There are three parts to cya:
+
+* A wrapper for duplicity, `duplicity-ex', that records in the backup the
+  ACLs and extended attributes of the files being backed up, and efficiently
+  backs up multiply hard-linked files.
+
+* A scheme for organizing Duplicity incremental backups that results in
+  multi-level backup chains while being space efficient.
+
+* A scheme and a utility, `cya-collect`, for performing unattended,
+  multi-level backups with Duplicity.
+
+
+Clients periodically (typically, daily) create and upload backups to an
+"incoming" directory at the archive server. The archive server collects
+these, placing them in apropriate directories in the multi-level backup
 hierarchy.
 
-Right now, cya won't do it for you (it has to be done manually).
+In more detail, on the archive server:
+
+	1) For each client that is backed up, cya-collect is called daily
+	   via cron.
+
+	2) It checks if $ROOT/incoming/finished directory exists. If yes,
+	   that means a new backup has been uploaded. If no, it exits.
+
+	3) If 'finished' exists, cya-collect uses the information from
+	   $ROOT/next_info to hardlink the backup files to apropriate backup
+	   sets in $ROOT/backups.  Once done, it removes the 'finished'
+	   directory, and creates $ROOT/incomin/next.  It hardlinks the
+	   apropriate backup set files (based on current time) into this
+	   directory.  It stores which backup set has been hardlinked to
+	   $ROOT/next_info.
+
+On the client:
+
+	1) /etc/cya/backup script is run daily via cron. It checks if
+	   $ROOT/incoming/next exists on the archive server. If not, it
+	   exits, as this means that cya-collect hasn't ran yet and moved a
+	   previously created backup to its right place.
+
+	2) Otherwise, it runs duplicity, uploading the result to
+	   $ROOT/incoming/next. How duplicity is run can be customized by
+	   creating a shell function named 'duplicity' in /etc/cya/backup
+
+	3) Once the backup has finished, $ROOT/incoming/next is moved to
+	   $ROOT/incoming/finished. This signals cya-collect that a new
+	   backup is ready.
+
+
 
 Features to be documented
 =========================
@@ -241,3 +239,4 @@ These do:
 * extending duplicity to efficiently store hardlinks
 * extending duplicity to store ACLs and xattrs
 * self-consistent backups using LVM snapshots
+* how to restore using the restore scripts
