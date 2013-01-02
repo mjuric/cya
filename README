@@ -36,8 +36,8 @@ In time, at each level in the directory tree (typically,
 different scales.
 
 
-Setting up
-----------
+Setting up unattended backups
+-----------------------------
 
 Preparing the archive server:
 
@@ -49,7 +49,7 @@ Preparing the archive server:
 	* copy templates/collect.sample to /etc/cya/collect. Customize if
 	  necessary.
 
-	* add /etc/cya/collect to crontab
+	* add /etc/cya/collect to crontab to be ran daily
 
 
 Preparing a client to be backed up:
@@ -58,12 +58,12 @@ Preparing a client to be backed up:
 	* install duplicity 0.6.20 or higher
 
 	* create /etc/cya directory and chown it to 700
-	* copy templates/backup.sample to /etc/cya/backup.
+	* copy templates/backup.sample to /etc/cya/backup and edit it.
 	* set the DESTHOST, DESTDIR, and SOURCEDIR variables. DESTHOST is the
 	  address of the archive server to be used by SSH to log into it.
 	  DESTDIR is the subdirectory within ~archive, where the backup sets
-	  will be stored (by convention, this is usually the fully qualified
-	  domain name of the client). SOURCEDIR is the directory on the
+	  will be stored. By convention, this is usually the fully qualified
+	  domain name of the client. SOURCEDIR is the directory on the
 	  client you want to back up (usually '/').
 	* set BACKUP_ENCRYPTION_KEY to a password unique to this client.
 	  This password will be used to encrypt the backup set, and should
@@ -74,7 +74,7 @@ Preparing a client to be backed up:
 	       `openssl rand -base64 32`
 	* create ssh keys in /etc/cya/keys (using ssh-keygen). Add the
 	  public key to ~archive/.ssh/authorized_keys on the archive server.
-	* add the archive server's host key ~root/.ssh/known_hosts, if it
+	* add the archive server's host key to ~root/.ssh/known_hosts, if it
 	  isn't there already.
 	  Tip: just running 'ssh archive.server.addr' and answering 'yes'
 	  when prompted should do it.
@@ -88,7 +88,7 @@ Preparing a client to be backed up:
 	  performance, have it run ~10-15 minutes after cya-collect runs on
 	  the server.
 	  WARNING: Some distros (notably, RHEL) set HOME=/ in /etc/crontab.
-	  If your distro does this, make sure you run /etc/home/backup with
+	  If your distro does this, make sure you run /etc/cya/backup with
 	  HOME=/root envvar set. Otherwise, cache directories will be
 	  created in /.
 
@@ -97,16 +97,18 @@ Multi-level backups
 ===================
 
 cya enables multi-level incremental Duplicity backups on varying time-scales
-(decade, year, month, week), while being secure and space efficient.
+(decade, year, month, week), by organizing Duplicity backups in a directory
+tree, where each level in the tree corresponds to the timescale of a backup
+stored at that level. Increments that are shared between different levels
+are hardlinked to the correct places in the hierarchy (thus the space
+efficiency).
 
-cya does this by organizing Duplicity backups in a directory tree, where
-each level in the tree corresponds to the timescale of a backup stored at
-that level. For example, a backup made on 2012-12-04 would be placed in a
-directory named:
+For example, a backup made on 2012-12-04 would be placed in a subdirectory
+of:
 
 	2000/2010/2012/2012-12/2012-12-02
 
-where subdirectories correspond to century, decade, year, month and week,
+where the levels correspond to century, decade, year, month and week,
 each holding backups for decades, years, months, weeks and days,
 respectively.
 
@@ -122,11 +124,11 @@ week of 2012-12-02, so an incremental backup would be made in
 
 On 2012-12-09, the destination directory will change to:
 
-	2000/2010/2012/2012-12/2012-12-02
+	2000/2010/2012/2012-12/2012-12-09
 
 As it is empty, cya will look into one directory up the hierarchy to use as
 a basis for this (incremental) backup.  It will first hardlink files from
-2000/2010/2012/2012-12 to 2000/2010/2012/2012-12/2012-12-02, and make this
+2000/2010/2012/2012-12 to 2000/2010/2012/2012-12/2012-12-09, and make this
 the 'incoming' directory for the next incremental backup.  The procedure is
 repeated when the month/year/decade boundaries are crossed. In time, at each
 level in the directory tree a backup chain forms, with increments taken at
@@ -156,7 +158,9 @@ directory, if that directory exists. When it succeeds, it renames that
 directory to 'finished'.
 
 The archive host periodically checks for existence of
-archive:$ROOT/incoming/finished. If it exists, it
+archive:$ROOT/incoming/finished. If it exists, the increment is moved to the
+correct level in the backup hierarchy, and a new $ROOT/incoming/next
+directory is prepared.
 
 
 Design consequences:
