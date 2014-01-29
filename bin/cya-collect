@@ -64,9 +64,11 @@ class Backup(object):
 			leaf = os.path.dirname(leaf)
 
 		# dispose of 'finished', but do it carefully (remember we're running as root!)
-		for fn, _ in files:
+		failed_transfers = glob.glob(os.path.join(self.finished_dir, ".*.part"))
+		for fn in itertools.chain( (f for f, _ in files), failed_transfers):
 			assert(os.path.dirname(fn) == self.finished_dir)
 			os.unlink(fn)
+
 		os.rmdir(self.finished_dir)
 
 	def backups_exist(self, level):
