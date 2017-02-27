@@ -72,8 +72,14 @@ done > "$DUPEXT_TMP/exclude.txtz"
 # Store acls and xattrs (the weirdness with cd-s is to make getfacl/attr output paths relative to $SRC_DIR)
 WD=$(pwd)
 find_all() { (cd "$WD" && find "$SRC_DIR" "${FINDARGS[@]}" -not -type s -not -type l -printf "%P\\0"); }
+
+echo -n "duplicity-ex: scanning for acls... "
 (cd "$SRC_DIR" && find_all | xargs -0 getfacl --numeric --skip-base) > "$DUPEXT_TMP/acl.txt"
+echo "done."
+
+echo -n "duplicity-ex: scanning for xattrs... "
 (cd "$SRC_DIR" && find_all | xargs -0 getfattr -h -m . -d)           > "$DUPEXT_TMP/attr.txt"
+echo "done."
 
 # Cache metadata in ~/.cache/duplicity-ex, updating only files that changed
 

@@ -1,0 +1,16 @@
+#
+# CYA configuration file. Edit it to your liking.
+#
+
+BACKUP_ENCRYPTION_KEY="__ENCKEY__"    # Backup encryption key. !!! KEEP IT SAFE !!!
+
+SOURCEDIR=/                                                             # Directory to back up
+DESTHOST="archive@archive.local"                                        # Archive host
+EXCLUDE="/tmp /proc /selinux /sys /remote /root/.cache/duplicity\*"     # Directories and patterns to exclude from backup
+DUPLICITYCMD="duplicity-ex"                                             # Duplicity wrapper to run (duplicity, duplicity-ex, duplicity-snap, duplicity-btrfs)
+
+#
+# You typically don't need to edit these.
+#
+DESTDIR=__DESTDIR__              # Directory on the archive host (convention: your hostname)
+SSHKEY="/etc/cya/keys/id_rsa"						# The location of the key used to upload to archive host

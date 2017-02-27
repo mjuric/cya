@@ -44,14 +44,19 @@ backup()
 			mkdir -p "$HOME/.cache/duplicity"
 			chmod 700 "$HOME/.cache/duplicity"
 
+			# Construct the --exclude line
+			EXCLUSIONS=()
+			for DIR in "${EXCLUDE[@]}"; do EXCLUSIONS+=("--exclude" "$DIR"); done
+
 			export PASSPHRASE="$BACKUP_ENCRYPTION_KEY"
-			duplicity \
+			"$DUPLICITYCMD" \
 				"$SOURCEDIR" \
 				scp://"$DESTHOST"/"$DESTDIR"/incoming/next \
 				--verbosity=error \
 				--ssh-options="-oIdentityFile=$SSHKEY" \
 				--asynchronous-upload --volsize=100 \
-				--ssh-backend pexpect
+				--ssh-backend pexpect \
+				"${EXCLUSIONS[@]}"
 
 			# Mark as finished
 			ssh -i "$SSHKEY" "$DESTHOST" \
