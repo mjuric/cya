@@ -40,31 +40,36 @@ Quick start
 
 ### Setting up the server (run as root)
 ```
+# install
 yum install duplicity
-cd /opt
-git clone git@github.com:mjuric/cya
+git clone git@github.com:mjuric/cya /opt/cya
+ln -s /opt/cya/bin/cya-server /usr/local/bin
+mkdir -p /var/lib/cya/backups
 
-mkdir /var/lib/cya/backups
+# install the backup collector
 cp /opt/cya/templates/99-cya-collect /etc/cron.d
 ```
 
-### Setting up the client
+### Setting up the client (full backup of `/home` on client1.example.com)
 
 #### On the server (run as root)
 ```
-/opt/cya/bin/cya-server-init client.example.com drop-client
+# write down the temporary password this command outputs
+cya-server new-backup client1.example.com-home drop-client1
 ```
 
 #### On the client (run as root)
 ```
+# install
 yum install duplicity
-cd /opt
-git clone git@github.com:mjuric/cya
-
+git clone git@github.com:mjuric/cya /opt/cya
+ln -s /opt/cya/bin/cya-client /usr/local/bin
 mkdir -p /etc/cya/backup-sets
-/opt/cya/bin/cya-client-init / /etc/cya/backup-sets/all drop-client@server.example.com:client.example.com
-
 cp /opt/cya/templates/99-cya-backup /etc/cron.d
+
+# when prompted, use the temporary password from the server
+# edit the config file, as instructed, to set up the EXCLUDEs
+cya-client new-backup /etc/cya/backup-sets/all /home drop-client1@server.example.com:client1.example.com-home
 ```
 
 Setting up unattended backups
