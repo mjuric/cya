@@ -35,62 +35,104 @@ In time, at each level in the directory tree (typically,
 ~archive/$CLIENT/backups) a backup chain forms, with increments taken at
 different scales.
 
+Quick start
+-----------
+
+### Setting up the server (run as root)
+```
+yum install duplicity
+cd /opt
+git clone git@github.com:mjuric/cya
+
+mkdir /var/lib/cya/backups
+cp /opt/cya/templates/99-cya-collect /etc/cron.d
+```
+
+### Setting up the client
+
+#### On the server (run as root)
+```
+/opt/cya/bin/cya-server-init client.example.com drop-client
+```
+
+#### On the client (run as root)
+```
+yum install duplicity
+cd /opt
+git clone git@github.com:mjuric/cya
+
+mkdir -p /etc/cya/backup-sets
+/opt/cya/bin/cya-client-init / /etc/cya/backup-sets/all drop-client@server.example.com:client.example.com
+
+cp /opt/cya/templates/99-cya-backup /etc/cron.d
+```
 
 Setting up unattended backups
 -----------------------------
 
 Preparing the archive server:
 
-	* install cya in /opt/cya
+	* install cya
 	* install duplicity 0.6.20 or higher
 
-	* create a user named 'archive'
+	* copy templates/collect.sample to /etc/cya/server.conf. Customize it
+	  as necessary. The most important variable to customize will be
+	  `ARCHIVE`, the directory (owned by root) in which the backup
+	  sets will be stored. You need to create this directory.
 
-	* copy templates/collect.sample to /etc/cya/collect. Customize if
-	  necessary.
-
-	* add /etc/cya/collect to crontab to be ran daily
-
+	* add a crontab entry to run `cya-server-collect` daily
 
 Preparing a client to be backed up:
 
-	* install cya to /opt/cya
-	* install duplicity 0.6.20 or higher
+	* On the archive server:
+	  + run:
+	  
+	       `cya-server-init <backup-name> <dropbox-user>'
 
-	* create /etc/cya directory and chown it to 700
-	* copy templates/backup.sample to /etc/cya/backup and edit it.
-	* set the DESTHOST, DESTDIR, and SOURCEDIR variables. DESTHOST is the
-	  address of the archive server to be used by SSH to log into it.
-	  DESTDIR is the subdirectory within ~archive, where the backup sets
-	  will be stored. By convention, this is usually the fully qualified
-	  domain name of the client. SOURCEDIR is the directory on the
-	  client you want to back up (usually '/').
-	* set BACKUP_ENCRYPTION_KEY to a password unique to this client.
-	  This password will be used to encrypt the backup set, and should
-	  not be shared with anyone (including the archive server!). Keep it
-	  in a safe place -- you will need it to restore the system from
-	  backups.
-	  Tip: A good way to generate a hard-to-guess password is by running
-	       `openssl rand -base64 32`
-	* create ssh keys in /etc/cya/keys (using ssh-keygen). Add the
-	  public key to ~archive/.ssh/authorized_keys on the archive server.
-	* add the archive server's host key to ~root/.ssh/known_hosts, if it
-	  isn't there already.
-	  Tip: just running 'ssh archive.server.addr' and answering 'yes'
-	  when prompted should do it.
+	    This will create a user `dropbox-user` and directories
+	    `~dropbox-user/backup-name` and `$ARCHIVE/backup-name`.  The
+	    client will log in as `dropbox-user` to add backup increments,
+	    and the server will periodically move them into
+	    `$ARCHIVE/backup-name` (whenever `cya-server-collect` is run).
 
-	* As root, run 'cya-collect --init ~archive/$DESTDIR' on the archive
-	  server to initialize the backup set directory structure.  DESTDIR
-	  must be the same as the one you set in /etc/cya/backup file on the
-	  client.
+	    By convention, `backup-name` is usually the fully qualified
+	    domain name of the client (if this is a full client backup)
 
-	* add /etc/cya/backup to crontab on the client. For optimal
-	  performance, have it run ~10-15 minutes after cya-collect runs on
-	  the server.
-	  WARNING: Some distros (notably, RHEL) set HOME=/ in /etc/crontab.
-	  If your distro does this, make sure you run /etc/cya/backup with
-	  HOME=/root envvar set. Otherwise, cache directories will be
-	  created in /.
+	    This command will also create an SSH key pair for
+	    `dropbox-user`; you will want to copy the *private* key to the
+	    client (the client will use it to log in).
+
+	* On the client:
+	  + install cya
+	  + install duplicity 0.6.20 or higher
+	  
+	  + copy the private ssh key from `~dropbox-user/.ssh/id_rsa` on the archive
+	    server.
+
+	  + initialize a new backupset by running
+
+	       `cya-client-init <source-dir> <backup-conf> <dropbox-ssh-uri> <key-file>`
+
+	    This will generate the backup configuration files in the `backup-conf`
+	    directory, to back up `source-dir` directory via `scp` to
+	    `dropbox-ssh-uri`. The `dropbox-ssh-uri` will be of the
+	    form `dropbox-user@archive:backup-name`.
+	    
+	    Note the backup encryption key this command will output.  This
+	    passphrase will be used to encrypt the backup set, and should
+	    not be shared with anyone (including the archive server!).  Keep
+	    it in a safe place -- you will need it to restore the system
+	    from backups.
+
+	  + add `cya-client-backup` to crontab on the client. An example
+	    file will be in `backup-conf/99-cya-cron`. For optimal
+	    performance, have it run ~10-15 minutes after cya-collect runs on
+	    the server.
+
+	    WARNING: Some distros (notably, RHEL) set HOME=/ in /etc/crontab.
+	    If your distro does this, make sure you run /etc/cya/backup with
+	    HOME=/root envvar set. Otherwise, cache directories will be
+	    created in /.
 
 
 Multi-level backups

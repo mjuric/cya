@@ -1,21 +1,18 @@
 #!/bin/bash
 #
-# cya-add-client <backup-name> <dropbox-username>
+# cya-server-init <backup-name> <dropbox-user>
 #
 
 set -e
 
-# Destination dir on the archive host
-DESTDIR=$(hostname)
-
-# Find where we're installed
-CYA_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )/../" && pwd )"
-
 # Check arguments
-[[ $# == 2 ]] || { echo "usage: $0 <backup-name> <dropbox-username>"; exit -1; }
+[[ $# == 2 ]] || { echo "usage: $0 <backup-name> <dropbox-user>"; exit -1; }
 
 DESTDIR="$1"
 DROPUSER="$2"
+
+# Find where we're installed
+CYA_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )/../" && pwd )"
 
 # TODO: Move this to a config file
 export ARCHIVE=/home/archive
