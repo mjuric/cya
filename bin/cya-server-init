@@ -1,0 +1,73 @@
+#!/bin/bash
+#
+# cya-add-client <backup-name> <dropbox-username>
+#
+
+set -e
+
+# Destination dir on the archive host
+DESTDIR=$(hostname)
+
+# Find where we're installed
+CYA_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )/../" && pwd )"
+
+# Check arguments
+[[ $# == 2 ]] || { echo "usage: $0 <backup-name> <dropbox-username>"; exit -1; }
+
+DESTDIR="$1"
+DROPUSER="$2"
+
+# TODO: Move this to a config file
+export ARCHIVE=/home/archive
+
+# Create dropbox user, if it doesn't exist
+# Note: having shared dropbox users is discouraged
+if ! id -u "$DROPUSER" >/dev/null 2>&1; then
+	echo "Creating user $DROPUSER..."
+	useradd "$DROPUSER"
+else
+	echo "User $DROPUSER already exists; re-using."
+fi
+
+DROPHOME=$(getent passwd "$DROPUSER" | cut -d : -f 6)
+[[ -d "$DROPHOME" ]] || { echo "Problem: $DROPHOME doesn't exist (?!)"; exit -1; }
+
+# Create SSH dir
+mkdir -p "$DROPHOME/.ssh"
+chmod 700 "$DROPHOME/.ssh"
+chown --reference "$DROPHOME" "$DROPHOME/.ssh"
+
+if [[ ! -f "$DROPHOME/.ssh/id_rsa.pub" ]]; then
+	# Create key
+	echo -n "Generating SSH key to log in as $DROPUSER..."
+	ssh-keygen -b 2048 -t rsa -q -N "" -f "$DROPHOME/.ssh/id_rsa"
+	chown --reference "$DROPHOME" "$DROPHOME/.ssh/id_rsa"*
+
+	# Add to authorized keys
+	AUTHKEYS="$DROPHOME/.ssh/authorized_keys"
+	cat "$DROPHOME/.ssh/id_rsa.pub" >> "$AUTHKEYS"
+
+	# Fix permissions
+	chown --reference "$DROPHOME" "$AUTHKEYS"
+	chmod 600 "$AUTHKEYS"
+	echo " done."
+else
+	echo "SSH key exists for $DROPUSER, skipping generation..."
+fi
+
+DROPDIR="$DROPHOME/$DESTDIR"
+[[ -d "$DROPDIR" ]] && { echo "$DROPDIR already exists. are you overwriting an existing backup?"; exit -1; }
+
+DESTDIR="$ARCHIVE/$DESTDIR"
+[[ -d "$DESTDIR" ]] && { echo "$DESTDIR already exists. are you overwriting an existing backup?"; exit -1; }
+
+# Initialize dropdir/destdir
+echo -n "Initializing $DESTDIR..."
+"$CYA_DIR/bin/cya-collect" --archive-user="$DROPUSER" --init "$DESTDIR"
+echo "done."
+
+# Move the dropbox dir (incoming) to its own user
+echo -n "Moving dropbox to $DROPDIR..."
+mv "$DESTDIR/incoming" "$DROPDIR"
+ln -s "$DROPDIR" "$DESTDIR/incoming"
+echo " done."
