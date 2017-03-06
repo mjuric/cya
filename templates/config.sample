@@ -1,0 +1,19 @@
+#
+# CYA configuration file. Edit it to your liking.
+#
+
+DESTHOST=__DESTHOST__             # Archive host
+DESTDIR=__DESTDIR__              # Directory on the archive host (convention: your hostname)
+BACKUP_ENCRYPTION_KEY="__ENCKEY__"    # Backup encryption key. !!! KEEP IT SAFE !!!
+SOURCEDIR=__SOURCEDIR__            # Directory to back up
+
+# Typical entries:
+#
+# If you're backing up the root of the filesystem:
+#     EXCLUDE=(/tmp /proc /selinux /sys /remote /root/.cache/duplicity\*)
+#
+# If you're backing up the directory of the user running duplicity
+#     EXCLUDE=(~/.cache/duplicity\*)
+#
+# If there are no exclusions, use:
+#     EXCLUDE=( )  # Subdirectories of $SOURCEDIR to exclude from backup

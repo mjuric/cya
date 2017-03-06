@@ -1,0 +1,127 @@
+#!/bin/bash
+#
+# cya-init-client <remote-cya-dropbox> <dropbox-private-key-file>
+#
+# example: cya-init-client drop_elenna@archive.local:elenna.local id_rsa
+#
+
+set -e
+
+info() { [[ ! -z "$VERBOSE" ]] && echo "$@" || : ; }
+die() { echo >&2 "$@"; exit -1; }
+
+# Find where we're installed
+CYA_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )/../" && pwd )"
+
+# Check arguments
+[[ $# -eq 4 ]] || { die "usage: $0 <dir-to-backup> <output-config-dir> <remote-cya-dropbox> <dropbox-private-key-file>"; }
+
+# Destination dir on the archive host
+SOURCEDIR="$1"
+CONFDIR="$2"
+DESTHOST="${3%:*}"
+DESTDIR="${3##*:}"
+KEYFILE="$4"
+
+# Refuse to run if $CONFDIR exists
+[[ -e $CONFDIR ]] && { die "$CONFDIR exists; remove it and try again."; }
+
+# Check if private key file exists (if given)
+if [[ ! -z "$KEYFILE" ]]; then
+	[[ -f "$KEYFILE" ]] || { die "$KEYFILE does not exist."; }
+fi
+
+# Refuse to run if $HOME is not set
+[[ -z $HOME ]] && { die "\$HOME environmental variable is not set; please set it and try again."; }
+
+# Does duplicity exist?
+hash duplicity 2>/dev/null || { die "Duplicity not found; please install it. aborting"; }
+
+# Is the version greater than minimum?
+DUPMINVER=0.6.20
+DUPVER="$(duplicity --version | cut -d' ' -f 2)"
+[[ $(echo -e "$DUPMINVER\n$DUPVER" | sort -V | head -n 1) == "$DUPMINVER" ]] || { die "duplicity not recent enough; need $DUPMINVER or higher, you have $DUPVER."; }
+
+CONFFILE="$CONFDIR/config"
+LOGDIR="$CONFDIR/var/log"
+RUNDIR="$CONFDIR/var/run"
+SSHKEY="$CONFDIR/private.key"
+
+mkdir -p "$LOGDIR" "$RUNDIR"
+chmod 700 "$CONFDIR"
+
+info "Creating $CONFFILE"
+sed "\
+	s|__ENCKEY__|$(openssl rand -base64 32)|g; \
+	s|__DESTHOST__|$(printf '%-50s' \"$DESTHOST\")|g; \
+	s|__SOURCEDIR__|$(printf '%-50s' \"$SOURCEDIR\")|g; \
+	s|__DESTDIR__|$(printf '%-50s' \"$DESTDIR\")|g; \
+" templates/config.sample > "$CONFFILE"
+chmod 600 "$CONFFILE"
+
+. "$CONFFILE"
+
+# echo $SOURCEDIR, $BACKUP_ENCRYPTION_KEY, $EXCLUDE, $DUPLICITY_CMD, $DESTHOST, $DESTDIR, $SSHKEY
+
+DH=(${DESTHOST//@/ })
+DH="${DH[@]:(-1)}"
+if ! ssh-keygen -F "$DH" >/dev/null 2>&1; then
+	info "Adding $DH host key to known_hosts..."
+	mkdir -p ~/.ssh
+	chmod 700 ~/.ssh
+	ssh-keyscan "$DH" >> ~/.ssh/known_hosts 2>/dev/null
+fi
+
+# Copy the private key
+cp "$KEYFILE" "$SSHKEY"
+chmod 600 "$SSHKEY"
+info "Key installed in $SSHKEY."
+
+SSH="ssh -o IdentitiesOnly=yes -i $SSHKEY"
+
+info -n "Checking that we can log in with our key... "
+$SSH "$DESTHOST" ":"
+info "success."
+
+info -n "Checking the dropbox directory exists... "
+OK=$($SSH "$DESTHOST" "test -d \"$DESTDIR\" && echo Y || echo N")
+[[ $OK == "Y" ]] && info "it does." || { info " failed."; die -n "\nerror: looks like $DESTHOST:$DESTDIR doesn't exist.\nrun cya-add-client on the backup server before setting up a client here."; }
+
+COLLECTION_CADENCE=$($SSH "$DESTHOST" "test -f collection_cadence && cat collection_cadence || echo 'unknown'")
+
+info "Creating backup cron job entry suitable for /etc/cron.d."
+cat > "$CONFDIR/99-cya-cron" <<-EOF
+	# Your backup job should run ~15 minutes after the server runs collection."
+	# Your server reports it runs collection every: $COLLECTION_CADENCE"
+	# Make sure to take time zone differences into account, if any."
+	45 5 * * * root HOME=$HOME $CYA_DIR/bin/cya-client-backup | tee -a $LOGDIR/cya.backup.log 2>&1
+EOF
+info "Done."
+
+cat <<-EOF
+	Backupset configuration created.
+	Backup encryption passphrase (!! STORE IT IN A SAFE PLACE !!):
+	
+	  ================================================
+	    $BACKUP_ENCRYPTION_KEY
+	  ================================================
+
+	Information:
+
+	  * Config dir:      $CONFDIR
+	  * Source:          $SOURCEDIR
+	  * Destination:     $DESTHOST:$DESTDIR
+	  * Dest. key:       $KEYFILE
+	  * Encryption key:  $BACKUP_ENCRYPTION_KEY
+
+	Next steps:
+
+	  * Edit $CONFFILE to adjust the EXCLUDES directive. cya-client-backup
+	    will refuse to run until you do.
+
+	  * Run first backup as:
+
+	      $CYA_DIR/bin/cya-client-backup $CONFDIR
+
+	  * To automate backups, customize and add $CONFDIR/99-cya-cron to cron.
+EOF

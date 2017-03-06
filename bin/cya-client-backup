@@ -1,0 +1,89 @@
+#!/bin/bash
+#
+# cya-client-backup <backupset-config-dir>
+#
+
+# Find where we're running from
+CYA_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )/../" && pwd )"
+
+# Check arguments
+[[ $# == 1 ]] || { echo 2>&1 "usage: $0 <backupset-config-dir>"; exit -1; }
+
+# Refuse to run if $HOME is not set
+[[ -z $HOME ]] && { echo 2>&1 "\$HOME environmental variable is not set; please set it and try again."; exit -1; }
+
+CONFDIR="$1"
+CONFFILE="$1/config"
+
+# Source the configuration.
+[[ -f "$CONFFILE" ]] || { echo 2>&1 "cannot find $CONFFILE."; exit -1; }
+. "$CONFFILE"
+SSHKEY="$CONFDIR/private.key"
+RUNDIR="$CONFDIR/var/run"
+
+# Refuse to run if EXCLUDE hasn't been set (or explicitly set to empty array )
+if [[ ! "$(declare -p EXCLUDE 2>/dev/null)" =~ "declare -a" ]]; then
+	echo 2>&1 "The EXCLUDE variable must be defined in $CONFFILE, and must be an array."
+	echo 2>&1 "Fix this in the config file before trying again."
+	exit -1
+fi
+
+# Allow for the overriding of duplicity, by creating a file named duplicity within the backup set
+[[ -f "$CONFDIR/duplicity" ]] && DUPLICITYCMD="$CONFDIR/duplicity" || DUPLICITYCMD="$CYA_DIR/lib/duplicity-ex"
+
+backup()
+{
+	(
+		set -e
+
+		# don't let two backups run at the same time
+		flock --nonblock 200 || { echo "Backup already in progress. Exiting."; exit 1; }
+
+		# save the users from themselves; check that /etc/cya, /etc/cya/backup and the private SSH keys are
+		# not group or world accessible
+		GOPERMS=$(stat -c'%A' "$CONFDIR" | cut -b 5-10)
+		[[ $GOPERMS != "------" ]] && { echo "Permissions to $CONFDIR incorrect (run 'chmod go-rwx $CONFDIR')"; exit -1; }
+		GOPERMS=$(stat -c'%A' "$SSHKEY" | cut -b 5-10)
+		[[ $GOPERMS != "------" ]] && { echo "Permissions to $SSHKEY incorrect (run 'chmod go-rwx $SSHKEY')"; exit -1; }
+
+		# Test if it's OK to start
+		START=$(ssh -i "$SSHKEY" "$DESTHOST" "test -d $DESTDIR/next && echo Y")
+		[[ $START != "Y" ]] && exit 2;
+
+		# Backup
+		(
+			# Close the lock file descriptor. Otherwise, if LVM is 
+			# called by duplicity, it will complain about open descriptors.
+			# Do it from a subshell so we don't release the lock
+			exec 200>&-
+
+			# Make sure cache directory isn't readable to anyone.
+			# This is really a bug in duplicity.
+			mkdir -p "$HOME/.cache/duplicity"
+			chmod 700 "$HOME/.cache/duplicity"
+
+			# Construct the --exclude line
+			EXCLUSIONS=()
+			if [[ ${#EXCLUDE[@]} -ne 0 ]]; then
+				for DIR in "${EXCLUDE[@]}"; do EXCLUSIONS+=("--exclude" "$DIR"); done
+			fi
+
+			export PASSPHRASE="$BACKUP_ENCRYPTION_KEY"
+			"$DUPLICITYCMD" \
+				"$SOURCEDIR" \
+				scp://"$DESTHOST"/"$DESTDIR"/next \
+				--verbosity=error \
+				--ssh-options="-oIdentityFile=$SSHKEY" \
+				--asynchronous-upload --volsize=100 \
+				"${EXCLUSIONS[@]}"
+#				--ssh-backend pexpect \
+
+			# Mark as finished
+			ssh -o IdentitiesOnly=yes -i "$SSHKEY" "$DESTHOST" \
+				mv "$DESTDIR"/next "$DESTDIR"/finished
+		)
+
+	) 200>"$RUNDIR"/cya-client-backup
+}
+
+backup

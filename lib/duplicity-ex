@@ -52,6 +52,9 @@ for i in ${!ARGS[*]}; do
 	ARG="${ARGS[i]}"
 	[[ $ARG == --exclude=* ]] && EXCLUDE+=("${ARG:10}")
 	[[ $ARG == --exclude ]]   && { (( i++ )); EXCLUDE+=("${ARGS[i]}"); }
+
+	[[ $ARG == --exclude-filelist=* ]] && { EXCLUDE+=( $(cat "${ARG:19}") ); }
+	[[ $ARG == --exclude-filelist ]]   && { (( i++ )); EXCLUDE+=( $(cat "${ARGS[i]}") ); }
 done
 echo "duplicity-ex: excluding: ${EXCLUDE[@]}"
 
@@ -63,7 +66,7 @@ for E in "${EXCLUDE[@]}"; do FINDARGS+=(-not \( -path "$E" -prune \)); done
 
 
 # Backup only one path for each multiply linked file (exclude others)
-find "$SRC_DIR" "${FINDARGS[@]}" -not -type d -links +1 -printf '%i %n %P\0' | sort -s -n -z -k 1,1 | tee "$DUPEXT_TMP/hardlinks.txtz" |
+find "${SRC_DIR[@]}" "${FINDARGS[@]}" -not -type d -links +1 -printf '%i %n %P\0' | sort -s -n -z -k 1,1 | tee "$DUPEXT_TMP/hardlinks.txtz" |
 while read -d $'\0' LINE; do
 	ARR=($LINE)
 	[[ $ARR == $i0 ]] && { printf "%s\0" "${SRC_DIR%/}/${LINE#$ARR ${ARR[1]} }"; } || { i0="$ARR"; }
