@@ -1,0 +1,3 @@
+# Your backup job should run ~15 minutes after the server runs collection.
+# Make sure to take time zone differences into account, if any.
+45 5 * * * root HOME=/root /opt/cya/bin/cya-backup

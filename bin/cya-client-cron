@@ -1,0 +1,19 @@
+#!/bin/bash
+#
+# Run cya-server-collect for every directory in $BACKUPSETS
+#
+
+# Defaults
+CYA_DIR=/opt/cya
+BACKUPSETS=/etc/cya/sets
+LOCKFILE=/var/run/cya-client-cron
+
+# Allow for overrides
+[[ -f /etc/cya/client.conf ]] && . /etc/cya/client.conf
+
+(
+	flock 200
+
+	find "$BACKUPSETS"/* -maxdepth 0 -type d -exec "$CYA_DIR"/bin/cya-client-backup "{}" \;
+
+) 200>"$LOCKFILE"

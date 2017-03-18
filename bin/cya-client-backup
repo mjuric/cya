@@ -14,12 +14,19 @@ CYA_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )/../" && pwd )"
 
 CONFDIR="$1"
 CONFFILE="$1/config"
+SSHKEY="$CONFDIR/id_rsa"
+RUNFILE="/var/run/cya-client-backup.$$"
+LOGFILE="/var/log/cya.log"
+BACKUPNAME=$(basename "$CONFDIR")
 
 # Source the configuration.
 [[ -f "$CONFFILE" ]] || { echo 2>&1 "cannot find $CONFFILE."; exit -1; }
 . "$CONFFILE"
-SSHKEY="$CONFDIR/private.key"
-RUNDIR="$CONFDIR/var/run"
+
+# Copy own output to logfile, in addition to stdout
+ts() { awk '{ print strftime("%Y-%m-%d %H:%M:%S ['"$BACKUPNAME"']"), $0; fflush(); }'; }
+exec >  >(ts | tee -ia "$LOGFILE")
+exec 2> >(ts | tee -ia "$LOGFILE" >&2)
 
 # Refuse to run if EXCLUDE hasn't been set (or explicitly set to empty array )
 if [[ ! "$(declare -p EXCLUDE 2>/dev/null)" =~ "declare -a" ]]; then
@@ -47,8 +54,8 @@ backup()
 		[[ $GOPERMS != "------" ]] && { echo "Permissions to $SSHKEY incorrect (run 'chmod go-rwx $SSHKEY')"; exit -1; }
 
 		# Test if it's OK to start
-		START=$(ssh -i "$SSHKEY" "$DESTHOST" "test -d $DESTDIR/next && echo Y")
-		[[ $START != "Y" ]] && exit 2;
+		START=$(ssh -i "$SSHKEY" "$DESTHOST" "test -d $DESTDIR/next && echo Y || echo N")
+		[[ $START != "Y" ]] && { echo "Archive host '$DESTHOST' not ready."; exit 2; }
 
 		# Backup
 		(
@@ -83,7 +90,8 @@ backup()
 				mv "$DESTDIR"/next "$DESTDIR"/finished
 		)
 
-	) 200>"$RUNDIR"/cya-client-backup
+	) 200>"$RUNFILE"
 }
 
+trap "{ rm -f $RUNFILE; }" EXIT
 backup

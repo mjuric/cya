@@ -64,12 +64,11 @@ cya-server new-backup client1.example.com-home drop-client1
 yum install duplicity
 git clone git@github.com:mjuric/cya /opt/cya
 ln -s /opt/cya/bin/cya-client /usr/local/bin
-mkdir -p /etc/cya/backup-sets
 cp /opt/cya/templates/99-cya-backup /etc/cron.d
 
 # when prompted, use the temporary password from the server
 # edit the config file, as instructed, to set up the EXCLUDEs
-cya-client new-backup /etc/cya/backup-sets/all /home drop-client1@server.example.com:client1.example.com-home
+cya-client new-backup drop-client1@server.example.com client1.example.com-home /home
 ```
 
 Setting up unattended backups
