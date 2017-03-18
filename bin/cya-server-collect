@@ -7,7 +7,6 @@ import time, os, os.path, glob, datetime, itertools, argparse, stat, pwd, sys
 
 class Backup(object):
 	backup_set_base = None		# Backup directory tree base (path)
-	archive_user = None		# username of the archive user
 
 	def date2dir(self, t):
 		# Round down to the start of the week (weeks begin on Sunday)
@@ -142,14 +141,24 @@ class Backup(object):
 
 	def __init__(self, **kwargs):
 		self.backup_root = os.path.realpath(kwargs['backup_root'])
-		self.archive_user = kwargs['archive_user']
-		self._arch_uid, self._arch_gid = pwd.getpwnam(self.archive_user)[2:4]
 
 		self.backup_set_base = os.path.join(self.backup_root,  'backups')
 		self.incoming_dir    = os.path.join(self.backup_root,  'incoming')
 		self.next_dir        = os.path.join(self.incoming_dir, 'next')
 		self.finished_dir    = os.path.join(self.incoming_dir, 'finished')
 		self.info_fn         = os.path.join(self.backup_root,  'next_info')
+
+		archive_user = kwargs['archive_user']
+		if archive_user is None:
+			# make it the owner of self.incoming_dir (after resolving any symlinks)
+			_incoming = os.path.realpath(self.incoming_dir)
+			try:
+				si = os.stat(_incoming)
+				self._arch_uid, self._arch_gid = si.st_uid, si.st_gid
+			except OSError:
+				self._arch_uid, self._arch_gid = os.getuid(), os.getgid()
+		else:
+			self._arch_uid, self._arch_gid = pwd.getpwnam(archive_user)[2:4]
 
 		self._now = kwargs['now']
 		self._dest_dir = os.path.join(self.backup_set_base, self.date2dir(self._now))
@@ -161,7 +170,7 @@ if __name__ == "__main__":
 	parser.add_argument('--init', action='store_true', help='Initialize backup root directory')
 
 	parser.add_argument('--force-time', dest='now', default=str(datetime.datetime.today()), metavar='T', help='Force the current time to be T. Must be formatted as "YYYY-MM-DD [HH-MM-SS[.SS]]"')
-	parser.add_argument('--archive-user', default='archive', metavar='USERNAME', help='Username of the user that writes backups to .../incoming/next directory.')
+	parser.add_argument('--archive-user', default=None, metavar='USERNAME', help='Username of the user that writes backups to .../incoming/next directory.')
 
 	args = parser.parse_args()
 
