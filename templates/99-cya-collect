@@ -1,0 +1,4 @@
+# call cya-server-cron to move files from dropbox users
+# to permanent storage
+#
+0 5 * * * root HOME=/root /opt/cya/bin/cya-server-cron

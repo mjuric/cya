@@ -1,0 +1,26 @@
+#!/bin/bash
+#
+# Run cya-server-collect for every directory in $BACKUPSETS
+#
+
+# Defaults
+ARCHIVEDIR=/var/lib/cya/backups
+LOCKFILE=/var/run/cya-run
+LOGFILE=/var/log/cya.log
+CYA_DIR=/opt/cya
+
+# Allow for overrides
+[[ -f /etc/cya/server.conf ]] && . /etc/cya/server.conf
+
+ts() { awk '{ print strftime("%Y-%m-%d %H:%M:%S"), $0; fflush(); }'; }
+
+# Copy own output to logfile, in addition to stdout
+exec >  >(ts | tee -ia "$LOGFILE")
+exec 2> >(ts | tee -ia "$LOGFILE" >&2)
+
+(
+	flock 200
+
+	find "$ARCHIVEDIR"/* -maxdepth 0 -type d -exec "$CYA_DIR"/bin/cya-server-collect "{}" \;
+
+) 200>"$LOCKFILE"

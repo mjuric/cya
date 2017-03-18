@@ -1,0 +1,59 @@
+#!/bin/bash
+#
+# cya-server-init <backup-name> <dropbox-user>
+#
+
+set -e
+
+# Check arguments
+[[ $# == 2 ]] || { echo "usage: $0 <backup-name> <dropbox-user>"; exit -1; }
+
+BACKUPNAME="$1"
+DROPUSER="$2"
+
+# Find where we're installed
+CYA_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )/../" && pwd )"
+ARCHIVEDIR=/var/lib/cya/backups
+HOSTNAME=$(hostname)
+
+# Allow for overrides
+[[ -f /etc/cya/server.conf ]] && . /etc/cya/server.conf
+
+# Create dropbox user, if it doesn't exist
+# Note: having shared dropbox users is discouraged
+if ! id -u "$DROPUSER" >/dev/null 2>&1; then
+	echo "Creating user $DROPUSER..."
+	useradd "$DROPUSER"
+else
+	echo "User $DROPUSER already exists; re-using."
+fi
+
+# sanity checking before we create a new drop box
+DROPHOME=$(getent passwd "$DROPUSER" | cut -d : -f 6)
+[[ -d "$DROPHOME" ]] || { echo "Problem: $DROPHOME doesn't exist (?!)"; exit -1; }
+
+DROPDIR="$DROPHOME/$BACKUPNAME"
+[[ -d "$DROPDIR" ]] && { echo "$DROPDIR already exists. are you overwriting an existing backup?"; exit -1; }
+
+DESTDIR="$ARCHIVEDIR/$BACKUPNAME"
+[[ -d "$DESTDIR" ]] && { echo "$DESTDIR already exists. are you overwriting an existing backup?"; exit -1; }
+
+# Initialize dropdir/destdir
+echo -n "Initializing $DESTDIR..."
+"$CYA_DIR/bin/cya-server-collect" --archive-user="$DROPUSER" --init "$DESTDIR"
+echo "done."
+
+# Move the dropbox dir (incoming) to its own user
+echo -n "Moving dropbox to $DROPDIR..."
+mv "$DESTDIR/incoming" "$DROPDIR"
+ln -s "$DROPDIR" "$DESTDIR/incoming"
+echo " done."
+
+# set up a temporary password for this user. the client-side
+# script will use it to log in and set up its key.
+PASSWD=$(openssl rand -base64 20 | tr -d =)
+echo "$PASSWD" | passwd --stdin "$DROPUSER"
+
+echo "Now run"
+echo "   cya-client new-backup $DROPUSER@$HOSTNAME $BACKUPNAME <dir_to_backup>"
+echo "and use '$PASSWD' as password when prompted."
