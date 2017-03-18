@@ -15,6 +15,7 @@ DROPUSER="$2"
 CYA_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )/../" && pwd )"
 ARCHIVEDIR=/var/lib/cya/backups
 HOSTNAME=$(hostname)
+DROPGROUP=cya-drop
 
 # Allow for overrides
 [[ -f /etc/cya/server.conf ]] && . /etc/cya/server.conf
@@ -26,6 +27,25 @@ if ! id -u "$DROPUSER" >/dev/null 2>&1; then
 	useradd "$DROPUSER"
 else
 	echo "User $DROPUSER already exists; re-using."
+fi
+
+#
+# Make sure this user is in the cya-drop group.
+#
+# If cya-drop is set to allow password authentication
+# in /etc/ssh/sshd_config, this will allow easy key setup
+# for these users.
+#
+# # Add this to the _end_ of your /etc/ssh/sshd_config
+# Match Group cya-drop
+#    PasswordAuthentication yes
+# 
+if groups $DROPUSER | grep &>/dev/null '\b'$DROPGROUP'\b'; then
+	echo "User $DROPUSER already in group $DROPGROUP."
+else
+	groupadd -f $DROPGROUP
+	usermod -a -G $DROPGROUP "$DROPUSER"
+	echo "Added $DROPUSER to group $DROPGROUP"
 fi
 
 # sanity checking before we create a new drop box
