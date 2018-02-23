@@ -1,7 +1,7 @@
 cya -- a multi-level backup driver for Duplicity
 ================================================
 
-Mario Juric <mjuric@lsst.org>
+Mario Juric <majuric@gmail.com>
 
 cya (pronnounced see-ya) is a driver for the Duplicity backup tool
 (http://duplicity.nongnu.org) that enables:
